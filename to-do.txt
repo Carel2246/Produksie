@@ -1,0 +1,11 @@
+* Skryf uitset na db
+* Html om na "huidige skedule" te gaan - nie nodig om elke keer te herskeduleer nie
+* "Aktiewe" take checkbox - moet geskeduleer word op begintyd
+* Kry excel import by al die html bladsye
+* Job tracking dmv "completed" checkbox vir elke taak
+* Kyk na formatering en kolomme van tabelle
+* Validasieknoppie by take - check dat jobs en resources gebruik wel bestaan
+
+
+o Gantt chart
+o Utilization koerse vir mense en masjiene

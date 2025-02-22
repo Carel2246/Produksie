@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add Task</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Add Task</h1>
+    <form method="POST" class="input-form">
+        <label for="task_id">Task ID:</label>
+        <input type="text" id="task_id" name="task_id" required><br>
+        <label for="job_id">Job ID:</label>
+        <select id="job_id" name="job_id" required>
+            <option value="">Select Job</option>
+            {% for job in jobs %}
+            <option value="{{ job.job_id }}">{{ job.job_id }}</option>
+            {% endfor %}
+        </select><br>
+        <label for="setup_time">Setup Time (min):</label>
+        <input type="number" id="setup_time" name="setup_time" required><br>
+        <label for="process_time_per_unit">Process Time per Unit (min):</label>
+        <input type="number" id="process_time_per_unit" name="process_time_per_unit" required><br>
+        <label for="required_resources">Required Resources (comma-separated):</label>
+        <input type="text" id="required_resources" name="required_resources" required><br>
+        <label for="predecessors">Predecessors (comma-separated task IDs):</label>
+        <input type="text" id="predecessors" name="predecessors"><br>
+        <label for="description">Description:</label>
+        <input type="text" id="description" name="description"><br>
+        <button type="submit" name="add" class="add-btn">Add Task</button>
+        <a href="{{ url_for('index') }}" class="home-btn">Home</a>
+    </form>
+
+    <h2>Append Tasks from Excel</h2>
+    <form method="POST" enctype="multipart/form-data" class="input-form">
+        <input type="file" name="file" accept=".xls,.xlsx" required>
+        <button type="submit" name="add_file" class="add-btn">Upload Excel</button>
+    </form>
+
+    <h2>Current Tasks</h2>
+    <table class="data-table">
+        <tr>
+            <th>Task ID</th>
+            <th>Job ID</th>
+            <th>Setup Time (min)</th>
+            <th>Process Time per Unit (min)</th>
+            <th>Required Resources</th>
+            <th>Predecessors</th>
+            <th>Description</th>
+            <th>Action</th>
+        </tr>
+        {% for task in tasks %}
+        <tr>
+            <form method="POST">
+                <td><input type="text" name="task_id" value="{{ task.task_id }}" readonly></td>
+                <td><input type="text" name="job_id" value="{{ task.job_id }}" required></td>
+                <td><input type="number" name="setup_time" value="{{ task.setup_time }}" required></td>
+                <td><input type="number" name="process_time_per_unit" value="{{ task.process_time_per_unit }}" required></td>
+                <td><input type="text" name="required_resources" value="{{ task.required_resources }}" required></td>
+                <td><input type="text" name="predecessors" value="{{ task.predecessors }}"></td>
+                <td><input type="text" name="description" value="{{ task.description }}"></td>
+                <td>
+                    <input type="hidden" name="id" value="{{ task.id }}">
+                    <button type="submit" name="update" class="add-btn">Update</button>
+                    <button type="submit" name="delete" class="delete-btn">Delete</button>
+                </td>
+            </form>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

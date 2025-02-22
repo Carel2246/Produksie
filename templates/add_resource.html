@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add Resource</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Add Resource</h1>
+    <form method="POST" class="input-form">
+        <label for="name">Resource Name:</label>
+        <input type="text" id="name" name="name" required><br>
+        <label for="type">Type (H/M):</label>
+        <input type="text" id="type" name="type" required><br>
+        <button type="submit" name="add" class="add-btn">Add Resource</button>
+        <a href="{{ url_for('index') }}" class="home-btn">Home</a>
+    </form>
+
+    <h2>Current Resources</h2>
+    <table class="data-table">
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Action</th>
+        </tr>
+        {% for resource in resources %}
+        <tr>
+            <form method="POST">
+                <td><input type="text" name="name" value="{{ resource.name }}" required></td>
+                <td><input type="text" name="type" value="{{ resource.type }}" required></td>
+                <td>
+                    <input type="hidden" name="id" value="{{ resource.id }}">
+                    <button type="submit" name="update" class="add-btn">Update</button>
+                    <button type="submit" name="delete" class="delete-btn">Delete</button>
+                </td>
+            </form>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

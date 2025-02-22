@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add Job</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Add Job</h1>
+    <form method="POST" class="input-form">
+        <label for="job_id">Job ID:</label>
+        <input type="text" id="job_id" name="job_id" required><br>
+        <label for="quantity">Quantity:</label>
+        <input type="number" id="quantity" name="quantity" required><br>
+        <label for="unit_price">Unit Price:</label>
+        <input type="number" id="unit_price" name="unit_price" step="0.01" required><br>
+        <label for="description">Description:</label>
+        <input type="text" id="description" name="description"><br>
+        <label for="client">Client:</label>
+        <input type="text" id="client" name="client"><br>
+        <label for="promised_date">Promised Date:</label>
+        <input type="datetime-local" id="promised_date" name="promised_date" required><br>
+        <button type="submit" name="add" class="add-btn">Add Job</button>
+        <a href="{{ url_for('index') }}" class="home-btn">Home</a>
+    </form>
+
+    <h2>Current Jobs</h2>
+    <table class="data-table">
+        <tr>
+            <th>Job ID</th>
+            <th>Quantity</th>
+            <th>Unit Price</th>
+            <th>Description</th>
+            <th>Client</th>
+            <th>Promised Date</th>
+            <th>Action</th>
+        </tr>
+        {% for job in jobs %}
+        <tr>
+            <form method="POST">
+                <td><input type="text" name="job_id" value="{{ job.job_id }}" readonly></td>
+                <td><input type="number" name="quantity" value="{{ job.quantity }}" required></td>
+                <td><input type="number" name="unit_price" value="{{ job.unit_price }}" step="0.01" required></td>
+                <td><input type="text" name="description" value="{{ job.description }}"></td>
+                <td><input type="text" name="client" value="{{ job.client }}"></td>
+                <td><input type="text" name="promised_date" value="{{ job.promised_date.strftime('%Y-%m-%d %I:%M %p') }}" required></td>
+                <td>
+                    <input type="hidden" name="id" value="{{ job.id }}">
+                    <button type="submit" name="update" class="add-btn">Update</button>
+                    <button type="submit" name="delete" class="delete-btn">Delete</button>
+                </td>
+            </form>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
