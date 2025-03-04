@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Job Shop Gantt Chart</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+    <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+    <style>
+        .gantt-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Job Shop Gantt Chart</h1>
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% else %}
+        <div id="gantt" class="gantt-container"></div>
+        <script type="text/json" id="segments-data">{{ segments_json | safe }}</script>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const segments = JSON.parse(document.getElementById('segments-data').textContent);
+                console.log('Segments data:', segments);
+
+                if (!segments || segments.length === 0) {
+                    console.error('No segments data available to render chart');
+                    return;
+                }
+
+                // Map segments to Frappe Gantt format
+                const tasks = segments.map(segment => ({
+                    id: segment.task_id,
+                    name: `${segment.task_id} (${segment.resources})`,
+                    start: segment.start,
+                    end: segment.end,
+                    custom_class: 'job-' + segment.job_id.replace(/[^a-zA-Z0-9]/g, ''), // Group by job_id
+                    dependencies: '' // Add if you have predecessor data
+                }));
+
+                console.log('Mapped tasks:', tasks);
+
+                // Initialize Frappe Gantt
+                const gantt = new Gantt('#gantt', tasks, {
+                    header_height: 50,
+                    column_width: 30,
+                    step: 24,
+                    view_modes: ['Quarter Day', 'Half Day', 'Day', 'Week', 'Month'],
+                    bar_height: 20,
+                    padding: 18,
+                    view_mode: 'Day',
+                    date_format: 'YYYY-MM-DDTHH:mm:ss.SSSZ', // Matches ISO format from segments
+                    custom_popup_html: function(task) {
+                        return `
+                            <div class="details-container">
+                                <h5>${task.name}</h5>
+                                <p>Start: ${new Date(task.start).toLocaleString()}</p>
+                                <p>End: ${new Date(task.end).toLocaleString()}</p>
+                            </div>
+                        `;
+                    }
+                });
+
+                console.log('Gantt chart initialized successfully');
+            });
+        </script>
+    {% endif %}
+    <a href="{{ url_for('index') }}">Back to Home</a> | <a href="{{ url_for('view_schedule') }}">View Schedule</a>
+</body>
+</html>

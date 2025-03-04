@@ -1,104 +1,26 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Select Start Date</title>
+    <title>Job Shop Scheduler</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <script>
-        const messages = [
-            "Sweeping cobwebs from the scheduler...",
-            "Calculating the past...",
-            "Reticulating splines...",
-            "Bribing the time gremlins...",
-            "Polishing the cogwheels...",
-            "Generating massive profits...",
-            "Profits failed...",
-            "Retrying....",
-            "Changing dimensions to 6...",
-            "Switching to the quantum computer...",
-            "Turning to alcohol in despair...",
-            "Rebooting the universe...",
-            "Thats better...",
-            "Fitting a month's work into a week...",
-            "Adding more hours to the day...",
-            "Conjuring machines from the ether...",
-            "Hiring more workers...",
-            "Firing the workers...",
-            "Scheduling the schedule...",
-            "Have you tried turning it on and off again?",
-            "It looks like we're stuck, but I promise we're not",
-            "Just a few more seconds...",
-            "I'm almost there...",
-            "If you're going to wait, you might as well make a cup of tea",
-            "Adjusting for lunar cycles...",
-            "Consulting the oracle at Delphi...",
-            "Warming up the flux capacitor...",
-            "Negotiating with the chaos butterflies...",
-            "Unraveling the fabric of time...",
-            "Pacifying the machine spirits...",
-            "Optimizing the coffee-to-code ratio...",
-            "Summoning extra-dimensional workers...",
-            "Debugging the debugger...",
-            "Overclocking the hamster wheel...",
-            "Realigning the planetary gears...",
-            "Feeding the schedule gnomes...",
-            "Balancing the cosmic ledger...",
-            "Rewriting history for efficiency...",
-            "Counting all the nanoseconds..."
-        ];
-
-        function showLoadingMessages() {
-            const terminal = document.getElementById('terminal');
-            terminal.style.display = 'block';
-            terminal.innerHTML = '';
-            
-            let index = 0;
-            function appendNextMessage() {
-                if (index < messages.length) {
-                    terminal.innerHTML += messages[index] + '\n';
-                    terminal.scrollTop = terminal.scrollHeight;
-                    index++;
-                    setTimeout(appendNextMessage, 500);
-                }
-            }
-            appendNextMessage();
-            
-            setTimeout(() => {
-                document.getElementById('scheduleForm').submit();
-            }, messages.length * 500);
-            
-            return false;
-        }
-    </script>
 </head>
 <body>
-    <h1>Select Schedule Start Date</h1>
-    <form id="scheduleForm" action="/schedule" method="POST" onsubmit="return showLoadingMessages()" class="input-form">
-        <label for="start_date">Start Date:</label>
+    <h1>Job Shop Scheduler</h1>
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+    <form action="/schedule" method="POST">
+        <label for="start_date">Scheduling Start Date:</label>
         <input type="datetime-local" id="start_date" name="start_date" value="{{ default_date }}" required>
         <button type="submit">Generate Schedule</button>
     </form>
-    <div id="terminal"></div>
-
-    <h2>Current Jobs</h2>
-    <table class="data-table">
-        <tr>
-            <th>Job ID</th>
-            <th>Description</th>
-            <th>Client</th>
-            <th>Quantity</th>
-        </tr>
-        {% for job in jobs %}
-        <tr>
-            <td>{{ job.job_id }}</td>
-            <td>{{ job.description }}</td>
-            <td>{{ job.client }}</td>
-            <td>{{ job.quantity }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-
-    <a href="/add_resource">Add Resource</a><br>
-    <a href="/add_job">Add Job</a><br>
-    <a href="/add_task">Add Task</a><br>
+    <h2>Data Management</h2>
+    <a href="{{ url_for('add_job') }}">Manage Jobs</a><br>
+    <a href="{{ url_for('add_task') }}">Manage Tasks</a><br>
+    <a href="{{ url_for('add_resource') }}">Manage Resources</a><br>
+    <a href="{{ url_for('add_resource_group') }}">Manage Resource Groups</a><br>
+    <a href="{{ url_for('add_calendar') }}">Manage Calendar</a><br>
+    <a href="{{ url_for('view_schedule') }}">View Current Schedule</a><br>
+    <a href="{{ url_for('gantt') }}">View Gantt Chart</a>
 </body>
 </html>

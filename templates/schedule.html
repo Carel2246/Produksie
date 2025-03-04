@@ -6,64 +6,40 @@
 </head>
 <body>
     <h1>Job Shop Schedule</h1>
-    <a href="/" class="reschedule-btn">Reschedule</a>
-
-    <h2>Tasks Ordered by Start Time</h2>
-    <table class="data-table">
-        <tr>
-            <th>Task Segment ID</th>
-            <th>Job</th>
-            <th>Description</th>
-            <th>Machines</th>
-            <th>Humans</th>
-            <th>Start Time</th>
-            <th>End Time</th>
-        </tr>
-        {% for segment in segments %}
-        <tr>
-            <td>{{ segment.task_id }}</td>
-            <td>{{ segment.job_id }}</td>
-            <td>{{ segment.description }}</td>
-            <td>{{ segment.machines }}</td>
-            <td>{{ segment.humans }}</td>
-            <td>{{ segment.start.strftime('%Y-%m-%d %I:%M %p') }}</td>
-            <td>{{ segment.end.strftime('%Y-%m-%d %I:%M %p') }}</td>
-        </tr>
+    <p>Total Rand Days Late: R{{ "{:,.2f}".format(total_rand_days_late).replace(",", " ").replace(".", ",") }}</p>
+    {% if elapsed_time is not none %}
+        <p>Time Taken to Schedule: {{ "{:.2f}".format(elapsed_time) }} seconds</p>
+    {% endif %}
+    
+    <h2>Tasks</h2>
+    <table>
+        <tr><th>Task ID</th><th>Job ID</th><th>Description</th><th>Resources</th><th>Start</th><th>End</th></tr>
+        {% for s in segments|sort(attribute='start') %}
+            <tr>
+                <td>{{ s.task_id }}</td>
+                <td>{{ s.job_id }}</td>
+                <td>{{ s.description }}</td>
+                <td>{{ s.resources }}</td>
+                <td>{{ s.start.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{{ s.end.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
         {% endfor %}
     </table>
 
-    <h2>Job Completion Dates</h2>
-    <table class="data-table">
-        <tr>
-            <th>Job</th>
-            <th>Description</th>
-            <th>Client</th>
-            <th>Promised Date</th>
-            <th>Completion Date</th>
-            <th>Days Late</th>
-            <th>Rand-days Late</th>
-        </tr>
-        {% for job_id, info in job_completions.items() %}
-        {% set days_late = ((info.completion - info.promised_date).total_seconds() / 86400) | round(2) %}
-        {% if days_late > 0 %}
-            {% set rand_days_late = (days_late * info.unit_price * info.quantity) | round(2) %}
-        {% else %}
-            {% set rand_days_late = 0 %}
-        {% endif %}
-        <tr>
-            <td>{{ job_id }}</td>
-            <td>{{ info.description }}</td>
-            <td>{{ info.client }}</td>
-            <td>{{ info.promised_date.strftime('%Y-%m-%d %I:%M %p') }}</td>
-            <td>{{ info.completion.strftime('%Y-%m-%d %I:%M %p') }}</td>
-            <td>{{ days_late }}</td>
-            <td>R {{ "{:,.2f}".format(rand_days_late) }}</td>
-        </tr>
+    <h2>Jobs</h2>
+    <table>
+        <tr><th>Job ID</th><th>Promised Date</th><th>Total Value</th><th>Expected Finish</th><th>Rand Days Late</th></tr>
+        {% for job in jobs|sort(attribute='expected_finish') %}
+            <tr>
+                <td>{{ job.job_id }}</td>
+                <td>{{ job.promised_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>R{{ "{:,.2f}".format(job.total_value).replace(",", " ").replace(".", ",") }}</td>
+                <td>{{ job.expected_finish.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>R{{ "{:,.2f}".format(job.rand_days_late).replace(",", " ").replace(".", ",") }}</td>
+            </tr>
         {% endfor %}
     </table>
-
-    <div id="terminal">
-        {{ log_output }}
-    </div>
+    
+    <a href="{{ url_for('index') }}">Back to Home</a> | <a href="{{ url_for('gantt') }}">View Gantt Chart</a>
 </body>
 </html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manage Calendar</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script>
+        function editCalendar(weekday) {
+            const row = document.querySelector(`tr[data-id="${weekday}"]`);
+            row.innerHTML = `
+                <td>${weekday}</td>
+                <td><input type="time" name="start_time" value="${row.cells[1].textContent}" form="edit_${weekday}"></td>
+                <td><input type="time" name="end_time" value="${row.cells[2].textContent}" form="edit_${weekday}"></td>
+                <td>
+                    <form id="edit_${weekday}" action="/add_calendar" method="POST">
+                        <input type="hidden" name="weekday" value="${weekday}">
+                        <button type="submit">Save</button>
+                    </form>
+                    <button onclick="location.reload()">Cancel</button>
+                </td>
+            `;
+        }
+        function deleteCalendar(weekday) {
+            if (confirm("Are you sure you want to delete calendar entry for weekday " + weekday + "?")) {
+                fetch('/delete_calendar/' + weekday, { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => { if (data.success) location.reload(); });
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Manage Calendar</h1>
+    <h2>Set Working Hours</h2>
+    <form method="POST">
+        <label>Weekday (0=Monday, 6=Sunday):</label>
+        <select name="weekday" required>
+            {% for i in range(7) %}
+                <option value="{{ i }}">{{ ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i] }}</option>
+            {% endfor %}
+        </select><br>
+        <label>Start Time:</label><input type="time" name="start_time" required><br>
+        <label>End Time:</label><input type="time" name="end_time" required><br>
+        <button type="submit">Set Hours</button>
+    </form>
+    <h2>Current Calendar</h2>
+    <table>
+        <tr><th>Weekday</th><th>Start Time</th><th>End Time</th><th>Actions</th></tr>
+        {% for cal in calendar %}
+            <tr data-id="{{ cal.weekday }}">
+                <td>{{ cal.weekday }}</td>
+                <td>{{ cal.start_time.strftime('%H:%M') }}</td>
+                <td>{{ cal.end_time.strftime('%H:%M') }}</td>
+                <td>
+                    <button onclick="editCalendar('{{ cal.weekday }}')">Edit</button>
+                    <button onclick="deleteCalendar('{{ cal.weekday }}')">Delete</button>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+    <a href="{{ url_for('index') }}">Back to Home</a>
+</body>
+</html>

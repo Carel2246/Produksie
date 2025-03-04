@@ -1,124 +1,29 @@
-/* styles.css */
 body {
     font-family: Arial, sans-serif;
-    text-align: center;
-    margin-top: 20px;
-    background-color: #f4f4f4;
+    margin: 20px;
 }
-
-h1, h2 {
-    color: #333;
-}
-
-.input-form {
-    display: inline-block;
-    margin-bottom: 20px;
-    background-color: #fff;
-    padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-
-label {
-    display: block;
-    margin: 10px 0 5px;
-    text-align: left;
-}
-
-input, select {
-    padding: 5px;
-    width: 200px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-
-button, .add-btn, .home-btn {
-    padding: 8px 16px;
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    margin: 5px;
-}
-
-button:hover, .add-btn:hover, .home-btn:hover {
-    background-color: #45a049;
-}
-
-.delete-btn {
-    padding: 8px 16px;
-    background-color: #f44336;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    margin: 5px;
-}
-
-.delete-btn:hover {
-    background-color: #d32f2f;
-}
-
-.data-table {
-    width: 80%;
-    margin: 20px auto;
+table {
     border-collapse: collapse;
+    width: 100%;
 }
-
-.data-table th, .data-table td {
+th, td {
     border: 1px solid #ddd;
     padding: 8px;
     text-align: left;
 }
-
-.data-table th {
+th {
     background-color: #f2f2f2;
-    color: #333;
 }
-
-.data-table tr:nth-child(even) {
-    background-color: #f9f9f9;
+form {
+    margin-bottom: 20px;
 }
-
-.reschedule-btn {
+label {
     display: inline-block;
-    padding: 10px 20px;
-    background-color: #4CAF50;
-    color: white;
-    text-decoration: none;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    margin: 10px 0;
+    width: 150px;
 }
-
-.reschedule-btn:hover {
-    background-color: #45a049;
+input, select {
+    margin-bottom: 10px;
 }
-
-#terminal {
-    width: 600px;
-    height: 200px;
-    background: #000;
-    color: #0f0;
-    font-family: 'Courier New', Courier, monospace;
-    text-align: left;
-    padding: 10px;
-    margin: 20px auto;
-    border: 1px solid #333;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-
 a {
-    color: #4CAF50;
-    text-decoration: none;
-    margin: 10px;
-}
-
-a:hover {
-    text-decoration: underline;
+    margin-right: 10px;
 }
