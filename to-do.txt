@@ -1,11 +1,7 @@
 * Job import: datums werk nie
-* Geen "double check" popup voor delete of edit van insettabelle nie. Maak een
 * "Aktiewe" take checkbox - moet op begintyd geskeduleer word
-* Job tracking dmv "completed" checkbox vir elke taak
 * Formatering en verfraaiing van alle bladsye en tabelle
 * Validasieknoppie by take - check dat jobs en resources wat gebruik word wel bestaan
-* Sit job name by skedule tabel
-* Sit by job: afleweringsdatum kolom
 
 
 o Gantt chart werk vir alle praktiese doeleindes nie.

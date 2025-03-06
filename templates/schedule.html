@@ -13,13 +13,15 @@
     
     <h2>Tasks</h2>
     <table>
-        <tr><th>Task ID</th><th>Job ID</th><th>Description</th><th>Resources</th><th>Start</th><th>End</th></tr>
+        <tr><th>Job ID</th><th>Job Description</th><th>Job Quantity</th><th>Task Description</th><th>Machines</th><th>People</th><th>Start</th><th>End</th></tr>
         {% for s in segments|sort(attribute='start') %}
             <tr>
-                <td>{{ s.task_id }}</td>
                 <td>{{ s.job_id }}</td>
+                <td>{{ s.job_description }}</td>
+                <td>{{ s.job_quantity }}</td>
                 <td>{{ s.description }}</td>
-                <td>{{ s.resources }}</td>
+                <td>{{ s.machines }}</td>
+                <td>{{ s.people }}</td>
                 <td>{{ s.start.strftime('%Y-%m-%d %H:%M') }}</td>
                 <td>{{ s.end.strftime('%Y-%m-%d %H:%M') }}</td>
             </tr>
@@ -32,7 +34,7 @@
         {% for job in jobs|sort(attribute='expected_finish') %}
             <tr>
                 <td>{{ job.job_id }}</td>
-                <td>{{ job.promised_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{{ job.promised_date.strftime('%Y-%m-%d %H:%M') if job.promised_date else '' }}</td>
                 <td>R{{ "{:,.2f}".format(job.total_value).replace(",", " ").replace(".", ",") }}</td>
                 <td>{{ job.expected_finish.strftime('%Y-%m-%d %H:%M') }}</td>
                 <td>R{{ "{:,.2f}".format(job.rand_days_late).replace(",", " ").replace(".", ",") }}</td>

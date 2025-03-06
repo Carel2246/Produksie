@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Production Schedule</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .today { background-color: #ffffcc; }
+    </style>
+</head>
+<body>
+    <h1>Production Schedule</h1>
+    <form method="GET" action="{{ url_for('production_schedule') }}">
+        <label for="days">Number of Days:</label>
+        <input type="number" id="days" name="days" value="{{ days }}" min="1" max="90">
+        <input type="hidden" name="start_date" value="{{ start_date.strftime('%Y-%m-%d') }}">
+        <button type="submit">Update</button>
+    </form>
+    <p><a href="{{ url_for('production_schedule', start_date=prev_start, days=days) }}">Previous Week</a> | 
+       <a href="{{ url_for('production_schedule', start_date=next_start, days=days) }}">Next Week</a> | 
+       <a href="{{ url_for('export_production_schedule', start_date=start_date.strftime('%Y-%m-%d'), days=days) }}">Export to Excel</a></p>
+    
+    <table>
+        <tr>
+            <th>Human Resource</th>
+            {% for date in dates %}
+                <th class="{% if date == today %}today{% endif %}">{{ date.strftime('%d %b') }}<br>{{ date.strftime('%a') }}</th>
+            {% endfor %}
+        </tr>
+        {% for human in humans %}
+            <tr>
+                <td>{{ human.name }}</td>
+                {% for date in dates %}
+                    <td>
+                        {% for task in schedule[human.name][date] %}
+                            * {{ task.job_description }} - {{ task.task_description }}<br>
+                        {% endfor %}
+                    </td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+    </table>
+    
+    <p><a href="{{ url_for('index') }}">Back to Home</a> | <a href="{{ url_for('schedule') }}">View List Schedule</a></p>
+</body>
+</html>

@@ -15,6 +15,7 @@
                 <td><input type="number" name="time_each" value="${row.cells[4].textContent}" form="edit_${taskNumber}"></td>
                 <td><input type="text" name="predecessors" value="${row.cells[5].textContent}" form="edit_${taskNumber}"></td>
                 <td><input type="text" name="resources" value="${row.cells[6].textContent}" form="edit_${taskNumber}"></td>
+                <td><input type="checkbox" name="completed" form="edit_${taskNumber}" ${row.cells[7].querySelector('input').checked ? 'checked' : ''}></td>
                 <td>
                     <form id="edit_${taskNumber}" action="${updateUrl}" method="POST">
                         <button type="submit">Save</button>
@@ -30,6 +31,20 @@
                     .then(data => { if (data.success) location.reload(); });
             }
         }
+        function toggleCompleted(taskId, isChecked) {
+            fetch('/toggle_task_completed/' + taskId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ completed: isChecked })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('Failed to update task status');
+                    location.reload();
+                }
+            });
+        }
     </script>
 </head>
 <body>
@@ -38,14 +53,13 @@
     <form method="POST" enctype="multipart/form-data">
         <label>Upload Excel File:</label><input type="file" name="excel_file" accept=".xls,.xlsx"><br>
         <p>Required columns: Task Number, Job Number, Setup Time, Time Each, Resources<br>
-           Optional: Description, Predecessors (comma-separated task numbers)</p>
+           Optional: Description, Predecessors, Completed (True/False)</p>
         <button type="submit">Import Tasks</button>
     </form>
     <h2>Add Task Manually</h2>
     <form method="POST">
         <label>Task Number:</label><input type="text" name="task_number" required><br>
-        <label>Job Number:</label>
-        <select name="job_number" required>
+        <label>Job Number:</label><select name="job_number" required>
             {% for job in jobs %}
                 <option value="{{ job.job_number }}">{{ job.job_number }}</option>
             {% endfor %}
@@ -53,13 +67,14 @@
         <label>Description:</label><input type="text" name="description"><br>
         <label>Setup Time (min):</label><input type="number" name="setup_time" min="0" required><br>
         <label>Time Each (min/unit):</label><input type="number" name="time_each" min="0" required><br>
-        <label>Predecessors (comma-separated):</label><input type="text" name="predecessors"><br>
-        <label>Resources (comma-separated):</label><input type="text" name="resources" required><br>
+        <label>Predecessors:</label><input type="text" name="predecessors" placeholder="comma-separated task numbers"><br>
+        <label>Resources:</label><input type="text" name="resources" placeholder="comma-separated resources" required><br>
+        <label>Completed:</label><input type="checkbox" name="completed"><br>
         <button type="submit">Add Task</button>
     </form>
     <h2>Current Tasks</h2>
     <table>
-        <tr><th>Task #</th><th>Job #</th><th>Description</th><th>Setup</th><th>Time Each</th><th>Predecessors</th><th>Resources</th><th>Actions</th></tr>
+        <tr><th>Task #</th><th>Job #</th><th>Description</th><th>Setup Time</th><th>Time Each</th><th>Predecessors</th><th>Resources</th><th>Completed</th><th>Actions</th></tr>
         {% for task in tasks %}
             <tr data-id="{{ task.task_number }}">
                 <td>{{ task.task_number }}</td>
@@ -69,6 +84,7 @@
                 <td>{{ task.time_each }}</td>
                 <td>{{ task.predecessors }}</td>
                 <td>{{ task.resources }}</td>
+                <td><input type="checkbox" name="completed" {% if task.completed %}checked{% endif %} onchange="toggleCompleted('{{ task.task_number }}', this.checked)"></td>
                 <td>
                     <button onclick="editTask('{{ task.task_number }}')">Edit</button>
                     <button onclick="deleteTask('{{ task.task_number }}')">Delete</button>
