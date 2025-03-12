@@ -55,7 +55,7 @@
     </form>
     <h2>Current Jobs</h2>
     <table>
-        <tr><th>Job #</th><th>Description</th><th>Order Date</th><th>Promised Date</th><th>Qty</th><th>Price Each</th><th>Customer</th><th>Actions</th></tr>
+        <tr><th>Job #</th><th>Description</th><th>Order Date</th><th>Promised Date</th><th>Qty</th><th>Price Each</th><th>Customer</th><th>Complete</th><th>Actions</th></tr>
         {% for job in jobs %}
             <tr data-id="{{ job.job_number }}">
                 <td>{{ job.job_number }}</td>
@@ -65,6 +65,7 @@
                 <td>{{ job.quantity }}</td>
                 <td>R{{ "{:,.2f}".format(job.price_each).replace(",", " ").replace(".", ",") }}</td>
                 <td>{{ job.customer }}</td>
+                <td>{{ job.completed }}</td>
                 <td>
                     <button onclick="editJob('{{ job.job_number }}')">Edit</button>
                     <button onclick="deleteJob('{{ job.job_number }}')">Delete</button>

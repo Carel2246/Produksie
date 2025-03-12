@@ -1,28 +1,52 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Job Shop Scheduler</title>
+    <title>Nigel Metal Scheduler</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <h1>Job Shop Scheduler</h1>
-    {% if error %}
-        <p style="color: red;">{{ error }}</p>
-    {% endif %}
-    <form action="/schedule" method="POST">
-        <label for="start_date">Scheduling Start Date:</label>
-        <input type="datetime-local" id="start_date" name="start_date" value="{{ default_date }}" required>
-        <button type="submit">Generate Schedule</button>
-    </form>
-    <h2>Data Management</h2>
-    <a href="{{ url_for('add_job') }}">Manage Jobs</a><br>
-    <a href="{{ url_for('add_task') }}">Manage Tasks</a><br>
-    <a href="{{ url_for('add_resource') }}">Manage Resources</a><br>
-    <a href="{{ url_for('add_resource_group') }}">Manage Resource Groups</a><br>
-    <a href="{{ url_for('add_calendar') }}">Manage Calendar</a><br>
-    <a href="{{ url_for('view_schedule') }}">View Current Schedule</a><br>
-    <a href="{{ url_for('production_schedule') }}">View Production Schedule</a><br>
-    <a href="{{ url_for('gantt') }}">View Gantt Chart</a>
+    <div class="container">
+        <h1>Nigel Metal Scheduler</h1>
+        <p>Welcome to the alpha release of our scheduling app</p>
 
+        <h2>Setup</h2>
+        <p>
+            <a href="{{ url_for('add_calendar') }}">Add/Edit Calendar</a> | 
+            <a href="{{ url_for('add_resource_group') }}">Add/Edit Resource Groups</a> | 
+            <a href="{{ url_for('add_resource') }}">Add/Edit Resources</a>
+        </p>
+
+        <h2>Job Management</h2>
+        <p>
+            <a href="{{ url_for('add_job_with_tasks') }}">Add/Edit Jobs</a> |
+            <a href="{{ url_for('review_jobs') }}">Review Jobs</a> |
+            <a href="{{ url_for('add_job') }}">Raw jobs data</a> | 
+            <a href="{{ url_for('add_task') }}">Raw tasks data</a>
+        </p>
+
+        <h2>Scheduling</h2>
+        <p>
+            <a href="{{ url_for('view_schedule') }}">View List Schedule</a> | 
+            <a href="{{ url_for('production_schedule') }}">View Production Schedule</a> | 
+            <a href="{{ url_for('gantt') }}">View Gantt Chart</a> |
+            <br> </br>
+            <form action="/schedule" method="POST">
+                <label for="start_date">Scheduling Start Date:</label>
+                <input type="datetime-local" id="start_date" name="start_date" value="{{ default_date }}" required>
+                <button type="submit">Generate Schedule</button>
+            </form>
+        </p>
+
+        <h2>Reporting</h2>
+        <p>
+            <a href="{{ url_for('cash_flow') }}">Cash Flow Projection</a> |
+            <a href="{{ url_for('delivery_schedule') }}">Delivery Schedule</a>
+        </p>
+
+        {% if error %}
+            <p style="color: red;">{{ error }}</p>
+        {% endif %}
+    </div>
 </body>
 </html>

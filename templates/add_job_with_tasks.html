@@ -1,0 +1,184 @@
+<!-- templates/add_job_with_tasks.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add Job with Tasks</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        .resource-popup {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid #ccc;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+        .resource-item {
+            margin: 5px 0;
+        }
+        .error-row {
+            background-color: #ffe6e6;
+        }
+    </style>
+</head>
+<body>
+    <h1>Add Job with Tasks</h1>
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+    <form method="POST" enctype="multipart/form-data" id="job-form">
+        <div class="job-details">
+            <h2>Job Details</h2>
+            <label>Job Number: <input type="text" name="job_number" required></label><br>
+            <label>Description: <input type="text" name="description"></label><br>
+            <label>Order Date: <input type="datetime-local" name="order_date"></label><br>
+            <label>Promised Date: <input type="datetime-local" name="promised_date"></label><br>
+            <label>Quantity: <input type="number" name="quantity" required min="1"></label><br>
+            <label>Price Each: <input type="number" name="price_each" step="0.01" required></label><br>
+            <label>Customer: <input type="text" name="customer"></label><br>
+            <label>Block Job: <input type="checkbox" id="blocked" name="blocked"></label><br>
+</div>
+        </div>
+
+        <h2>Tasks</h2>
+        <table id="tasks-table">
+            <thead>
+                <tr>
+                    <th>Task Number</th>
+                    <th>Description</th>
+                    <th>Setup Time (min)</th>
+                    <th>Time Each (min)</th>
+                    <th>Predecessors</th>
+                    <th>Resources</th>
+                    <th>Completed</th>
+                    <th>Remove</th>
+                </tr>
+            </thead>
+            <tbody id="tasks-container">
+                <!-- Task rows will be added here -->
+            </tbody>
+        </table>
+        <button type="button" onclick="addTaskRow()">Add Task Row</button>
+        <button type="button" onclick="validateResources()">Validate Resources</button><br><br>
+        <input type="submit" value="Submit Job and Tasks">
+    </form>
+
+    <h2>Existing Jobs</h2>
+    <ul>
+    {% for job in jobs %}
+        <li>{{ job.job_number }} - {{ job.description }} (Qty: {{ job.quantity }})</li>
+    {% endfor %}
+    </ul>
+
+    <!-- Resource Popup -->
+    <div id="resource-popup" class="resource-popup">
+        {% for resource in resources %}
+            <div class="resource-item">
+                <input type="checkbox" id="res-{{ resource.name }}" value="{{ resource.name }}">
+                <label for="res-{{ resource.name }}">{{ resource.name }} ({{ resource.type }})</label>
+            </div>
+        {% endfor %}
+        {% for group in resource_groups %}
+            <div class="resource-item">
+                <input type="checkbox" id="group-{{ group.name }}" value="{{ group.name }}">
+                <label for="group-{{ group.name }}">{{ group.name }} (Group)</label>
+            </div>
+        {% endfor %}
+        <button onclick="applyResources()">Apply</button>
+    </div>
+
+    <script>
+        let taskCount = 0;
+        let activeInput = null;
+
+        function addTaskRow() {
+            taskCount++;
+            const container = document.getElementById('tasks-container');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" name="tasks[${taskCount}][task_number]" required></td>
+                <td><input type="text" name="tasks[${taskCount}][description]"></td>
+                <td><input type="number" name="tasks[${taskCount}][setup_time]" required min="0"></td>
+                <td><input type="number" name="tasks[${taskCount}][time_each]" required min="0"></td>
+                <td><input type="text" name="tasks[${taskCount}][predecessors]" placeholder="Comma-separated"></td>
+                <td><input type="text" name="tasks[${taskCount}][resources]" required placeholder="Comma-separated" onfocus="showResourcePopup(this)"></td>
+                <td><input type="checkbox" name="tasks[${taskCount}][completed]"></td>
+                <td class="remove-task" onclick="this.parentElement.remove()">X</td>
+            `;
+            container.appendChild(row);
+        }
+
+        function showResourcePopup(input) {
+            activeInput = input;
+            const popup = document.getElementById('resource-popup');
+            const rect = input.getBoundingClientRect();
+            popup.style.left = `${rect.left}px`;
+            popup.style.top = `${rect.bottom + window.scrollY}px`;
+            popup.style.display = 'block';
+
+            // Load current values into checkboxes
+            const currentValues = input.value.split(',').map(v => v.trim()).filter(v => v);
+            document.querySelectorAll('#resource-popup input[type="checkbox"]').forEach(cb => {
+                cb.checked = currentValues.includes(cb.value);
+            });
+        }
+
+        function applyResources() {
+            if (!activeInput) return;
+            const selected = [];
+            document.querySelectorAll('#resource-popup input[type="checkbox"]:checked').forEach(cb => {
+                selected.push(cb.value);
+            });
+            activeInput.value = selected.join(', ');
+            document.getElementById('resource-popup').style.display = 'none';
+        }
+
+        // Hide popup when clicking outside
+        document.addEventListener('click', (e) => {
+            const popup = document.getElementById('resource-popup');
+            if (!popup.contains(e.target) && e.target !== activeInput) {
+                popup.style.display = 'none';
+            }
+        });
+
+        function validateResources() {
+            const rows = document.querySelectorAll('#tasks-container tr');
+            const resourceData = [];
+            rows.forEach((row, index) => {
+                const resourcesInput = row.querySelector(`input[name="tasks[${index + 1}][resources]"]`);
+                if (resourcesInput && resourcesInput.value) {
+                    resourceData.push({
+                        row: index,
+                        resources: resourcesInput.value.split(',').map(r => r.trim())
+                    });
+                }
+            });
+
+            fetch('/validate_resources', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ resources: resourceData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                rows.forEach(row => row.classList.remove('error-row'));
+                data.invalid.forEach(item => {
+                    const row = rows[item.row];
+                    row.classList.add('error-row');
+                    alert(`Invalid resources in row ${item.row + 1}: ${item.invalid.join(', ')}`);
+                });
+                if (data.invalid.length === 0) {
+                    alert('All resources are valid!');
+                }
+            })
+            .catch(error => console.error('Validation error:', error));
+        }
+
+        // Add one task row by default
+        addTaskRow();
+    </script>
+</body>
+</html>

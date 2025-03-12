@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cash Flow Projection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script> <!-- Annotation Plugin -->
+</head>
+<body>
+    <div class="container">
+        <h1>Cash Flow Projection</h1>
+        <button onclick="window.location.href='{{ url_for('index') }}'">Home</button>
+
+        <p>Select a date range to view projected cash flow.</p>
+
+        <form method="GET" action="{{ url_for('cash_flow') }}">
+            <label for="start_date">Start Date:</label>
+            <input type="date" id="start_date" name="start_date" value="{{ start_date }}" required>
+
+            <label for="end_date">End Date:</label>
+            <input type="date" id="end_date" name="end_date" value="{{ end_date }}" required>
+
+            <button type="submit">Update</button>
+        </form>
+
+        <canvas id="cashFlowChart"></canvas>
+        <p id="noDataMessage" style="display: none; color: red;">No cash flow projection available for the selected range.</p>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                var canvas = document.getElementById("cashFlowChart");
+
+                if (!canvas) {
+                    console.error("Canvas element 'cashFlowChart' not found!");
+                    return;
+                }
+
+                var ctx = canvas.getContext("2d");
+                var data = {{ data|tojson }};
+
+                console.log("Projected Cash Flow Data:", data);
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    document.getElementById("cashFlowChart").style.display = "none";
+                    document.getElementById("noDataMessage").style.display = "block";
+                    return;
+                }
+
+                var labels = data.map(d => d.date);
+                var values = data.map(d => d.value);
+
+                // Format values in South African Rand (R xxx xxx)
+                function formatCurrency(value) {
+                    return "R " + value.toLocaleString("en-ZA");
+                }
+
+                // Find the last data point
+                var lastLabel = labels[labels.length - 1];
+                var lastValue = values[values.length - 1];
+
+                // Create the chart
+                new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: "Projected Cash Flow",
+                            data: values,
+                            borderColor: "green",
+                            backgroundColor: "rgba(0, 255, 0, 0.2)",
+                            fill: true,
+                            pointBackgroundColor: "green",
+                            pointRadius: values.map((v, i) => (i === values.length - 1 ? 6 : 3)), // Highlight last point
+                            pointHoverRadius: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false }, // Hide legend
+                            tooltip: {
+                                callbacks: {
+                                    label: function(tooltipItem) {
+                                        return formatCurrency(tooltipItem.raw);
+                                    }
+                                }
+                            },
+                            annotation: {
+                                annotations: {
+                                    lastPointLabel: {
+                                        type: "label",
+                                        xValue: lastLabel, // Last date
+                                        yValue: lastValue, // Last value
+                                        backgroundColor: "rgba(0,0,0,0.7)",
+                                        content: formatCurrency(lastValue),
+                                        color: "white",
+                                        font: { weight: "bold" },
+                                        position: "end"
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { title: { display: true, text: "Date" }},
+                            y: {
+                                ticks: {
+                                    callback: function(value) { return formatCurrency(value); } // Format y-axis
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+        </script>
+    </div>
+</body>
+</html>

@@ -12,6 +12,7 @@
     {% endif %}
     
     <h2>Tasks</h2>
+
     <table>
         <tr><th>Job ID</th><th>Job Description</th><th>Job Quantity</th><th>Task Description</th><th>Machines</th><th>People</th><th>Start</th><th>End</th></tr>
         {% for s in segments|sort(attribute='start') %}

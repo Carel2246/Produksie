@@ -1,0 +1,206 @@
+<!-- templates/review_jobs.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Review Jobs</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        .job-details, .tasks-table { margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .edit-form { display: none; }
+        #flowchart { border: 1px solid #ccc; width: 100%; height: 400px; overflow: auto; }
+    </style>
+    <!-- Mermaid.js CDN -->
+    <script src="https://unpkg.com/mermaid@10.9.0/dist/mermaid.min.js"></script>
+    <script>
+        function loadJob(jobNumber) {
+            console.log('Loading job:', jobNumber);
+            if (jobNumber) {
+                window.location.href = '/review_jobs?job_number=' + encodeURIComponent(jobNumber);
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Review Jobs</h1>
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <div class="job-selector">
+        <label for="job_select">Select Job:</label>
+        <select id="job_select" name="job_number" onchange="loadJob(this.value)">
+            <option value="">-- Select a Job --</option>
+            {% for job in jobs %}
+                <option value="{{ job.job_number }}" {% if job.job_number == selected_job %}selected{% endif %}>
+                    {{ job.job_number }} - {{ job.description }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    {% if selected_job %}
+    <div class="job-details">
+        <h2>Job Details: {{ selected_job }}</h2>
+        <p><strong>Description:</strong> {{ job.description }}</p>
+        <p><strong>Order Date:</strong> {{ job.order_date or 'N/A' }}</p>
+        <p><strong>Promised Date:</strong> {{ job.promised_date or 'N/A' }}</p>
+        <p><strong>Quantity:</strong> {{ job.quantity }}</p>
+        <p><strong>Price Each:</strong> R {{ "%.2f"|format(job.price_each) }}</p>
+        <p><strong>Customer:</strong> {{ job.customer or 'N/A' }}</p>
+        <p><strong>Blocked:</strong> 
+        <input type="checkbox" onchange="toggleJobBlocked('{{ job.job_number }}', this.checked)" 
+               {% if job.blocked %}checked{% endif %}>
+        </p>
+    </div>
+
+    <script>
+    function toggleJobBlocked(jobNumber, blocked) {
+        fetch('/toggle_job_blocked/' + jobNumber, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blocked: blocked })
+        })
+        .then(response => response.json())
+        .then(() => location.reload())
+        .catch(error => console.error('Error:', error));
+    }
+    </script>
+
+    <h2>Tasks</h2>
+    <table class="tasks-table">
+        <thead>
+            <tr>
+                <th>Task Number</th>
+                <th>Description</th>
+                <th>Setup Time (min)</th>
+                <th>Time Each (min)</th>
+                <th>Predecessors</th>
+                <th>Resources</th>
+                <th>Completed</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in tasks %}
+            <tr id="task-row-{{ task.task_number }}">
+                <td>{{ task.task_number }}</td>
+                <td>{{ task.description }}</td>
+                <td>{{ task.setup_time }}</td>
+                <td>{{ task.time_each }}</td>
+                <td>{{ task.predecessors or '' }}</td>
+                <td>{{ task.resources }}</td>
+                <td>
+                    <input type="checkbox" onchange="toggleTaskCompleted('{{ task.task_number }}', this.checked)" 
+                           {% if task.completed %}checked{% endif %}>
+                </td>
+                <td>
+                    <button onclick="showEditForm('{{ task.task_number }}')">Edit</button>
+                    <button onclick="deleteTask('{{ task.task_number }}')">Delete</button>
+                </td>
+            </tr>
+            <tr class="edit-form" id="edit-form-{{ task.task_number }}">
+                <td><input type="text" name="task_number" value="{{ task.task_number }}" readonly></td>
+                <td><input type="text" name="description" value="{{ task.description }}"></td>
+                <td><input type="number" name="setup_time" value="{{ task.setup_time }}" min="0"></td>
+                <td><input type="number" name="time_each" value="{{ task.time_each }}" min="0"></td>
+                <td><input type="text" name="predecessors" value="{{ task.predecessors or '' }}"></td>
+                <td><input type="text" name="resources" value="{{ task.resources }}"></td>
+                <td></td>
+                <td>
+                    <button onclick="updateTask('{{ task.task_number }}')">Save</button>
+                    <button onclick="hideEditForm('{{ task.task_number }}')">Cancel</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Task Flowchart</h2>
+    <div id="flowchart" class="mermaid">
+        {% if tasks %}
+            graph LR
+            {% for task in tasks %}
+                {{ task.task_number }}["{{ task.task_number }}<br>{{ task.description }}"]
+                {% if task.completed %}
+                    class {{ task.task_number }} completed;
+                {% endif %}
+                {% if task.predecessors %}
+                    {% for pred in task.predecessors.split(',') %}
+                        {% set trimmed_pred = pred|trim %}
+                        {% if trimmed_pred in tasks|map(attribute='task_number') %}
+                            {{ trimmed_pred }} --> {{ task.task_number }}
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            {% endfor %}
+            classDef completed fill:#d4edda,stroke:#333;
+        {% else %}
+            graph LR
+            A[No Tasks Available]
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <script>
+        function showEditForm(taskNumber) {
+            document.getElementById('task-row-' + taskNumber).style.display = 'none';
+            document.getElementById('edit-form-' + taskNumber).style.display = 'table-row';
+        }
+
+        function hideEditForm(taskNumber) {
+            document.getElementById('task-row-' + taskNumber).style.display = 'table-row';
+            document.getElementById('edit-form-' + taskNumber).style.display = 'none';
+        }
+
+        function updateTask(taskNumber) {
+            const row = document.getElementById('edit-form-' + taskNumber);
+            const data = {
+                task_number: row.querySelector('input[name="task_number"]').value,
+                description: row.querySelector('input[name="description"]').value,
+                setup_time: row.querySelector('input[name="setup_time"]').value,
+                time_each: row.querySelector('input[name="time_each"]').value,
+                predecessors: row.querySelector('input[name="predecessors"]').value,
+                resources: row.querySelector('input[name="resources"]').value
+            };
+            fetch('/update_task/' + taskNumber, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(() => location.reload())
+            .catch(error => console.error('Error:', error));
+        }
+
+        function deleteTask(taskNumber) {
+            if (confirm('Are you sure you want to delete task ' + taskNumber + '?')) {
+                fetch('/delete_task/' + taskNumber, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                })
+                .then(response => response.json())
+                .then(() => location.reload())
+                .catch(error => console.error('Error:', error));
+            }
+        }
+
+        function toggleTaskCompleted(taskNumber, completed) {
+            fetch('/toggle_task_completed/' + taskNumber, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ completed: completed })
+            })
+            .then(response => response.json())
+            .then(() => location.reload())
+            .catch(error => console.error('Error:', error));
+        }
+
+        // Initialize Mermaid
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+</html>

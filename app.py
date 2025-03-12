@@ -19,6 +19,9 @@ db = SQLAlchemy(app)
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+with app.app_context():
+    print(f"Database URL: {db.engine.url}")
+
 class Job(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     job_number = db.Column(db.String(50), unique=True, nullable=False)
@@ -28,6 +31,8 @@ class Job(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     price_each = db.Column(db.Float, nullable=False)
     customer = db.Column(db.String(100))
+    completed = db.Column(db.Boolean, default=False, nullable=False)
+    blocked = db.Column(db.Boolean, default=False, nullable=False)
 
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -113,6 +118,15 @@ def load_data():
         task.predecessor_tasks = [task_dict.get(p) for p in pred_ids if p in task_dict]
 
     return jobs, tasks
+
+def update_job_completion(job_number):
+    job = Job.query.filter_by(job_number=job_number).first()
+    if not job:
+        return
+    
+    all_tasks_done = Task.query.filter_by(job_number=job_number, completed=False).count() == 0
+    job.completed = all_tasks_done
+    db.session.commit()
 
 def generate_schedule(task_order, tasks, start_date):
     resource_busy = {res.name: [] for res in Resource.query.all()}
@@ -342,14 +356,17 @@ def update_task(task_number):
     task.resources = request.form['resources']
     task.completed = 'completed' in request.form
     db.session.commit()
+    update_job_completion(task.job_number)
     return redirect(url_for('add_task'))
 
 @app.route('/delete_task/<task_number>', methods=['POST'])
 def delete_task(task_number):
     task = Task.query.filter_by(task_number=task_number).first_or_404()
+    job_number = task.job_number
     Schedule.query.filter_by(task_number=task_number).delete()
     db.session.delete(task)
     db.session.commit()
+    update_job_completion(job_number)
     return jsonify({"success": True})
 
 @app.route('/toggle_task_completed/<task_number>', methods=['POST'])
@@ -358,6 +375,7 @@ def toggle_task_completed(task_number):
     data = request.get_json()
     task.completed = data.get('completed', False)
     db.session.commit()
+    update_job_completion(task.job_number)
     return jsonify({"success": True})
 
 @app.route('/add_resource', methods=['GET', 'POST'])
@@ -477,29 +495,37 @@ def schedule():
     if not tasks:
         return render_template('index.html', error="No tasks to schedule", default_date=start_date.strftime('%Y-%m-%dT%H:%M'))
 
+    # Filter out tasks from blocked jobs
+    active_jobs = [job for job in jobs if not job.blocked]
+    active_tasks = [task for task in tasks if task.job_number in [job.job_number for job in active_jobs]]
+
+    if not active_tasks:
+        return render_template('index.html', error="No active tasks to schedule (all jobs blocked)", default_date=start_date.strftime('%Y-%m-%dT%H:%M'))
+
     start_time = timer.time()
 
     creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
     creator.create("Individual", list, fitness=creator.FitnessMin)
     toolbox = base.Toolbox()
-    toolbox.register("indices", random.sample, range(len(tasks)), len(tasks))
+    toolbox.register("indices", random.sample, range(len(active_tasks)), len(active_tasks))
     toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.indices)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     toolbox.register("mate", tools.cxOrdered)
     toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.05)
     toolbox.register("select", tools.selTournament, tournsize=3)
-    toolbox.register("evaluate", evaluate, tasks=tasks, start_date=start_date, jobs=jobs)
+    toolbox.register("evaluate", evaluate, tasks=active_tasks, start_date=start_date, jobs=active_jobs)
 
     population = toolbox.population(n=50)
     hof = tools.HallOfFame(1)
     algorithms.eaSimple(population, toolbox, cxpb=0.7, mutpb=0.2, ngen=100, halloffame=hof, verbose=False)
     best_individual = hof[0]
 
-    task_order = [tasks[i] for i in best_individual]
-    task_times = generate_schedule(task_order, tasks, start_date)
+    task_order = [active_tasks[i] for i in best_individual]
+    task_times = generate_schedule(task_order, active_tasks, start_date)
     adjusted_times = adjust_to_working_hours(start_date, task_times)
-    total_rand_days_late = evaluate(best_individual, tasks, start_date, jobs)[0]
+    total_rand_days_late = evaluate(best_individual, active_tasks, start_date, active_jobs)[0]
 
+    # Rest of the function remains unchanged, just use active_jobs and active_tasks
     end_time = timer.time()
     elapsed_time = end_time - start_time
 
@@ -507,9 +533,9 @@ def schedule():
     db.session.commit()
 
     segments = []
-    job_dict = {job.job_number: job for job in jobs}
+    job_dict = {job.job_number: job for job in jobs}  # Use all jobs for lookup
     resource_dict = {res.name: res.type for res in Resource.query.all()}
-    for task in tasks:
+    for task in active_tasks:  # Only active tasks
         if task.task_number in adjusted_times:
             start, end = adjusted_times[task.task_number]
             machines = ', '.join(res.name for res in task.selected_resources if resource_dict[res.name] == 'M')
@@ -535,8 +561,8 @@ def schedule():
             })
 
     job_data = []
-    for job in jobs:
-        job_tasks = [t for t in tasks if t.job_number == job.job_number]
+    for job in active_jobs:  # Only active jobs
+        job_tasks = [t for t in active_tasks if t.job_number == job.job_number]
         if all(t.task_number in adjusted_times or t.completed for t in job_tasks):
             expected_finish = max(adjusted_times[t.task_number][1] for t in job_tasks if t.task_number in adjusted_times) if any(t.task_number in adjusted_times for t in job_tasks) else start_date
             days_late = max(0, (expected_finish - job.promised_date).total_seconds() / 86400) if job.promised_date else 0
@@ -627,7 +653,6 @@ def gantt():
 
 @app.route('/production_schedule')
 def production_schedule():
-    # Get start date from query parameter or default to earliest scheduled task
     start_date_str = request.args.get('start_date')
     if start_date_str:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
@@ -635,30 +660,26 @@ def production_schedule():
         earliest_schedule = Schedule.query.order_by(Schedule.start_time).first()
         start_date = earliest_schedule.start_time.date() if earliest_schedule else datetime.now().date()
     
-    # Get number of days from query parameter, default to 14
     days = int(request.args.get('days', 14))
-    if days < 1 or days > 90:  # Reasonable bounds
+    if days < 1 or days > 90:
         days = 14
     
     dates = [start_date + timedelta(days=i) for i in range(days)]
     today = datetime.now().date()
     
-    # Navigation dates
     prev_start = (start_date - timedelta(days=7)).strftime('%Y-%m-%d')
     next_start = (start_date + timedelta(days=7)).strftime('%Y-%m-%d')
 
-    # Get human resources
     humans = Resource.query.filter_by(type='H').all()
     if not humans:
         return render_template('production_schedule.html', error="No human resources defined.")
 
-    # Load tasks and jobs for lookup
     tasks = Task.query.all()
     jobs = Job.query.all()
+    blocked_jobs = [job for job in jobs if job.blocked]  # Get blocked jobs
     task_dict = {task.task_number: task for task in tasks}
     job_dict = {job.job_number: job for job in jobs}
 
-    # Build schedule dictionary: {human: {date: [tasks]}}
     schedule = {human.name: {date: [] for date in dates} for human in humans}
     schedules = Schedule.query.all()
 
@@ -671,10 +692,9 @@ def production_schedule():
         if task_date not in dates:
             continue
         
-        # Get human resources assigned to this task
         resources = [res.strip() for res in s.resources_used.split(',')]
         for res_name in resources:
-            if res_name in schedule:  # If it's a human resource
+            if res_name in schedule:
                 schedule[res_name][task_date].append({
                     'task_description': task.description,
                     'job_description': job.description if job else task.job_number
@@ -688,7 +708,8 @@ def production_schedule():
                            prev_start=prev_start, 
                            next_start=next_start, 
                            start_date=start_date, 
-                           days=days)
+                           days=days,
+                           blocked_jobs=blocked_jobs)  # Pass blocked jobs
 
 @app.route('/export_production_schedule')
 def export_production_schedule():
@@ -779,6 +800,206 @@ def export_production_schedule():
     output.seek(0)
     filename = f"Produksieskedule {datetime.now().strftime('%Y-%m-%d')}.xlsx"
     return send_file(output, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+@app.route('/add_job_with_tasks', methods=['GET', 'POST'])
+def add_job_with_tasks():
+    if request.method == 'POST':
+        order_date = request.form.get('order_date')
+        promised_date = request.form.get('promised_date')
+        job = Job(
+            job_number=request.form['job_number'],
+            description=request.form['description'],
+            order_date=datetime.strptime(order_date, '%Y-%m-%dT%H:%M') if order_date else None,
+            promised_date=datetime.strptime(promised_date, '%Y-%m-%dT%H:%M') if promised_date else None,
+            quantity=int(request.form['quantity']),
+            price_each=float(request.form['price_each']),
+            customer=request.form['customer'],
+            blocked='blocked' in request.form  # Add blocked status
+        )
+        # Rest of the function unchanged until commit
+        db.session.commit()
+        return redirect(url_for('add_job_with_tasks'))
+    return render_template('add_job_with_tasks.html', 
+                          jobs=Job.query.all(), 
+                          resources=Resource.query.all(),
+                          resource_groups=ResourceGroup.query.all())
+
+@app.route('/validate_resources', methods=['POST'])
+def validate_resources():
+    data = request.get_json()
+    resource_data = data.get('resources', [])
+    
+    # Get all valid resource and group names
+    valid_resources = {res.name for res in Resource.query.all()}
+    valid_groups = {group.name for group in ResourceGroup.query.all()}
+    valid_names = valid_resources.union(valid_groups)
+    
+    # Check each row's resources
+    invalid_entries = []
+    for entry in resource_data:
+        resources = entry['resources']
+        invalid = [r for r in resources if r and r not in valid_names]
+        if invalid:
+            invalid_entries.append({'row': entry['row'], 'invalid': invalid})
+    
+    return jsonify({'invalid': invalid_entries})
+
+@app.route('/review_jobs', methods=['GET'])
+def review_jobs():
+    jobs = Job.query.all()
+    selected_job_number = request.args.get('job_number')
+    job = None
+    tasks = []
+    tasks_json = []
+
+    if selected_job_number:
+        job = Job.query.filter_by(job_number=selected_job_number).first()
+        if job:
+            tasks = Task.query.filter_by(job_number=job.job_number).all()
+            tasks_json = [
+                {
+                    'task_number': task.task_number,
+                    'description': task.description,
+                    'setup_time': task.setup_time,
+                    'time_each': task.time_each,
+                    'predecessors': task.predecessors,
+                    'resources': task.resources,
+                    'completed': task.completed
+                } for task in tasks
+            ]
+
+    return render_template('review_jobs.html',
+                          jobs=jobs,
+                          selected_job=selected_job_number,
+                          job=job,
+                          tasks=tasks,
+                          tasks_json=json.dumps(tasks_json))
+
+@app.route('/cash_flow', methods=['GET'])
+def cash_flow():
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    # Determine default date range from scheduled tasks
+    first_scheduled = Schedule.query.order_by(Schedule.start_time).first()
+    last_scheduled = Schedule.query.order_by(Schedule.end_time.desc()).first()
+
+    default_start_date = first_scheduled.start_time.date() if first_scheduled else datetime.today().date()
+    default_end_date = last_scheduled.end_time.date() if last_scheduled else datetime.today().date()
+
+    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else default_start_date
+    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else default_end_date
+
+    logger.debug(f"Cash Flow Projection Date Range: Start={start_date}, End={end_date}")
+
+    # Get only jobs that are NOT completed
+    pending_jobs = Job.query.filter_by(completed=False).all()
+    logger.debug(f"Total Unfinished Jobs: {len(pending_jobs)}")
+
+    job_values = {}
+    schedules = Schedule.query.all()
+
+    for job in pending_jobs:
+        job_tasks = Task.query.filter_by(job_number=job.job_number).all()
+        if not job_tasks:
+            logger.debug(f"Job {job.job_number} has no tasks.")
+            continue
+
+        # Find estimated completion date (last scheduled task's end time)
+        estimated_completion = max(
+            (s.end_time for s in schedules if s.task_number in [t.task_number for t in job_tasks]),
+            default=None
+        )
+
+        if estimated_completion:
+            logger.debug(f"Job {job.job_number} - Estimated Completion on {estimated_completion.date()}")
+        else:
+            logger.debug(f"Job {job.job_number} has no scheduled tasks.")
+
+        if estimated_completion and start_date <= estimated_completion.date() <= end_date:
+            date_key = estimated_completion.date().strftime("%Y-%m-%d")
+            job_value = job.quantity * job.price_each
+            job_values[date_key] = job_values.get(date_key, 0) + job_value
+        else:
+            logger.debug(f"Job {job.job_number} is out of the selected range.")
+
+    logger.debug(f"Projected Job Values by Date: {job_values}")
+
+    # Generate cumulative cash flow projection
+    sorted_dates = sorted(job_values.keys())
+    cumulative_values = []
+    total = 0
+
+    for date in sorted_dates:
+        total += job_values[date]
+        cumulative_values.append({"date": date, "value": total})
+
+    logger.debug(f"Cumulative Projection Values: {cumulative_values}")
+
+    return render_template("cash_flow.html", data=cumulative_values, start_date=start_date, end_date=end_date)
+
+@app.route('/delivery_schedule', methods=['GET'])
+def delivery_schedule():
+    schedules = Schedule.query.all()
+    if not schedules:
+        return render_template('delivery_schedule.html', error="No scheduled tasks available.")
+
+    jobs = Job.query.all()
+    tasks = Task.query.all()
+    blocked_jobs = [job for job in jobs if job.blocked]  # Get blocked jobs
+    job_dict = {job.job_number: job for job in jobs}
+    task_dict = {task.task_number: task for task in tasks}
+
+    start_date = min(s.start_time for s in schedules).date()
+    end_date = max(s.end_time for s in schedules).date() + timedelta(days=1)
+
+    job_completion = {}
+    max_delivery_date = end_date
+    for job in jobs:
+        if job.blocked:  # Skip blocked jobs for scheduling
+            continue
+        job_tasks = [t for t in tasks if t.job_number == job.job_number]
+        scheduled_tasks = [t for t in job_tasks if t.task_number in [s.task_number for s in schedules]]
+        
+        if scheduled_tasks and all(t.completed or t.task_number in [s.task_number for s in schedules] for t in job_tasks):
+            completion_date = max(s.end_time for s in schedules if s.task_number in [t.task_number for t in scheduled_tasks]).date()
+            delivery_date = completion_date + timedelta(days=1)
+            while delivery_date.weekday() >= 5:
+                delivery_date += timedelta(days=1)
+            is_late = job.promised_date and delivery_date > job.promised_date.date() if job.promised_date else False
+            description = f"{job.customer or 'Unknown'} - {job.description} ({job.job_number})"
+            if is_late and job.promised_date:
+                description += f" (Promised: {job.promised_date.date().strftime('%Y-%m-%d')})"
+            job_completion[job.job_number] = {
+                'delivery_date': delivery_date,
+                'is_late': is_late,
+                'description': description
+            }
+            if delivery_date > max_delivery_date:
+                max_delivery_date = delivery_date
+
+    dates = [start_date + timedelta(days=i) for i in range((max_delivery_date - start_date).days + 1)]
+    delivery_schedule = {date: [] for date in dates}
+    for job_num, info in job_completion.items():
+        delivery_schedule[info['delivery_date']].append({
+            'description': info['description'],
+            'is_late': info['is_late']
+        })
+
+    return render_template('delivery_schedule.html',
+                          dates=dates,
+                          delivery_schedule=delivery_schedule,
+                          start_date=start_date,
+                          end_date=max_delivery_date,
+                          blocked_jobs=blocked_jobs)  # Pass blocked jobs
+
+@app.route('/toggle_job_blocked/<job_number>', methods=['POST'])
+def toggle_job_blocked(job_number):
+    job = Job.query.filter_by(job_number=job_number).first_or_404()
+    data = request.get_json()
+    job.blocked = data.get('blocked', False)
+    db.session.commit()
+    return jsonify({"success": True})
 
 if __name__ == '__main__':
     app.run(debug=True)
