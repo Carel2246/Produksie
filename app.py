@@ -10,9 +10,10 @@ import json
 import time as timer
 from sqlalchemy.sql import text
 import math
+import os
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:admin@localhost:5432/jobshop'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://carel:EhB9KidyX4upNYyp6PQJh5i7uQJa2o37@dpg-cvc9v91c1ekc73eovi9g-a/jobshop'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
