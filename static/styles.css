@@ -102,6 +102,36 @@ td {
     margin: 2rem 0;
 }
 
+/* Navigation */
+.nav-buttons {
+    margin-bottom: 1rem;
+}
+
+.nav-buttons button {
+    margin-right: 1rem;
+}
+
+/* Job Sections */
+.job-selector {
+    margin-bottom: 1.5rem;
+}
+
+.job-details, .tasks-table, .materials-table {
+    margin-bottom: 2rem;
+}
+
+.edit-form {
+    display: none;
+}
+
+#flowchart {
+    border: 1px solid #CCCCCC;
+    width: 100%;
+    height: 400px;
+    overflow: auto;
+    margin: 1rem 0;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .container {

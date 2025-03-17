@@ -3,6 +3,11 @@
 * Review jobs kort home button
 * Job import: datums werk nie
 * "Aktiewe" take checkbox - moet op begintyd geskeduleer word
+* Op skedules: voltooide take in groen
+* "Task number" - tik net nommer en prepend vanself die job nommer
+* Sit vermoë by om meer as een van 'n resource te gebruik
+* Job tabel moet "nota" veld hê
+* Resource validation: as daar fout is, moet huidige data behou word (d.i. die bladsy moenie opdateer nie)
 
 o Gantt chart werk vir alle praktiese doeleindes nie.
 o Utilization koerse vir mense en masjiene

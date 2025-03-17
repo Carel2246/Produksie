@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add Template</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script>
+        function addTaskRow() {
+            const tbody = document.getElementById('tasks-body');
+            const rowCount = tbody.getElementsByTagName('tr').length;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" name="tasks[${rowCount}][task_number]" required></td>
+                <td><input type="text" name="tasks[${rowCount}][description]"></td>
+                <td><input type="number" name="tasks[${rowCount}][setup_time]" min="0" step="0.1" required></td>
+                <td><input type="number" name="tasks[${rowCount}][time_each]" min="0" step="0.1" required></td>
+                <td><input type="text" name="tasks[${rowCount}][predecessors]"></td>
+                <td><input type="text" name="tasks[${rowCount}][resources]" required></td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        function addMaterialRow() {
+            const tbody = document.getElementById('materials-body');
+            const rowCount = tbody.getElementsByTagName('tr').length;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" name="materials[${rowCount}][description]" required></td>
+                <td><input type="number" name="materials[${rowCount}][quantity]" min="0" step="0.1" required></td>
+                <td><input type="text" name="materials[${rowCount}][unit]" required></td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        function editTemplate() {
+            const templateId = document.getElementById('edit_template_id').value;
+            if (templateId) {
+                window.location.href = '/edit_template/' + templateId;
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Add Template</h1>
+        <button onclick="window.location.href='{{ url_for('index') }}'">Home</button>
+        
+        <div>
+            <label for="edit_template_id">Edit Current Templates:</label>
+            <select id="edit_template_id">
+                <option value="">-- Select a Template --</option>
+                {% for template in templates %}
+                    <option value="{{ template.id }}">{{ template.name }} - {{ template.description }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" onclick="editTemplate()">Edit</button>
+        </div>
+
+        {% if error %}
+            <p style="color: red;">{{ error }}</p>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('add_template') }}">
+            <label for="name">Template Name:</label>
+            <input type="text" id="name" name="name" required><br>
+            <label for="description">Description:</label>
+            <input type="text" id="description" name="description"><br>
+            <label for="price_each">Price Each:</label>
+            <input type="number" id="price_each" name="price_each" min="0" step="0.01"><br>
+
+            <h2>Tasks</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Task Number</th>
+                        <th>Description</th>
+                        <th>Setup Time (min)</th>
+                        <th>Time Each (min)</th>
+                        <th>Predecessors</th>
+                        <th>Resources</th>
+                    </tr>
+                </thead>
+                <tbody id="tasks-body">
+                    <!-- Populated dynamically -->
+                </tbody>
+            </table>
+            <button type="button" onclick="addTaskRow()">Add Task</button>
+
+            <h2>Materials</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Quantity</th>
+                        <th>Unit</th>
+                    </tr>
+                </thead>
+                <tbody id="materials-body">
+                    <!-- Populated dynamically -->
+                </tbody>
+            </table>
+            <button type="button" onclick="addMaterialRow()">Add Material</button>
+
+            <br><button type="submit">Add Template</button>
+        </form>
+
+        <h2>Existing Templates</h2>
+        <ul>
+            {% for template in templates %}
+                <li>{{ template.name }} - {{ template.description }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>

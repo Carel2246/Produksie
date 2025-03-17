@@ -1,206 +1,297 @@
-<!-- templates/review_jobs.html -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <title>Review Jobs</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-        .job-details, .tasks-table { margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        .edit-form { display: none; }
-        #flowchart { border: 1px solid #ccc; width: 100%; height: 400px; overflow: auto; }
-    </style>
-    <!-- Mermaid.js CDN -->
-    <script src="https://unpkg.com/mermaid@10.9.0/dist/mermaid.min.js"></script>
+    <script src="https://unpkg.com/mermaid@10/dist/mermaid.min.js"></script>
     <script>
-        function loadJob(jobNumber) {
-            console.log('Loading job:', jobNumber);
-            if (jobNumber) {
-                window.location.href = '/review_jobs?job_number=' + encodeURIComponent(jobNumber);
+        mermaid.initialize({ startOnLoad: false });
+
+        function updateJobDropdown() {
+            const includeCompleted = document.getElementById('include_completed').checked;
+            window.location.href = '{{ url_for("review_jobs") }}?include_completed=' + includeCompleted;
+        }
+
+        function addTaskRow(data = {}) {
+            const tbody = document.getElementById('tasks-body');
+            if (!tbody) {
+                console.error('tasks-body not found');
+                return;
+            }
+            console.log('addTaskRow called with:', data);
+            const rowCount = tbody.getElementsByTagName('tr').length;
+            const resources = (data.resources || '').split(',').map(r => r.trim());
+            const machines = resources.filter(r => {% for g in machine_groups %}'{{ g.name }}' === r || {% endfor %}{% for r in machine_resources %}'{{ r.name }}' === r || {% endfor %}false).join(', ');
+            const humans = resources.filter(r => {% for g in human_groups %}'{{ g.name }}' === r || {% endfor %}{% for r in human_resources %}'{{ r.name }}' === r || {% endfor %}false).join(', ');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" name="tasks[${rowCount}][task_number]" value="${data.task_number || ''}" required></td>
+                <td><input type="text" name="tasks[${rowCount}][description]" value="${data.description || ''}"></td>
+                <td><input type="number" name="tasks[${rowCount}][setup_time]" value="${data.setup_time || ''}" min="0" step="0.1" required></td>
+                <td><input type="number" name="tasks[${rowCount}][time_each]" value="${data.time_each || ''}" min="0" step="0.1" required></td>
+                <td><input type="text" name="tasks[${rowCount}][predecessors]" value="${data.predecessors || ''}"></td>
+                <td class="resource-cell">
+                    <input type="text" name="tasks[${rowCount}][machines]" value="${machines}" class="resources-input" oninput="syncChecklist(this, 'machines')">
+                    <div class="resource-checklist" style="display: none; position: absolute; background: white; border: 1px solid #ccc; padding: 10px;">
+                        ${generateChecklist(rowCount, 'machines')}
+                    </div>
+                </td>
+                <td class="resource-cell">
+                    <input type="text" name="tasks[${rowCount}][humans]" value="${humans}" class="resources-input" oninput="syncChecklist(this, 'humans')">
+                    <div class="resource-checklist" style="display: none; position: absolute; background: white; border: 1px solid #ccc; padding: 10px;">
+                        ${generateChecklist(rowCount, 'humans')}
+                    </div>
+                </td>
+                <td><input type="checkbox" name="tasks[${rowCount}][completed]" ${data.completed ? 'checked' : ''}></td>
+                <td>
+                    <button type="button" class="delete-btn" onclick="deleteRow(this)" ${data.task_number ? '' : 'style="display: none;"'}>Delete</button>
+                    <button type="button" class="cancel-btn" onclick="cancelRow(this)" ${data.task_number ? 'style="display: none;"' : ''}>Cancel</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+            const inputs = row.querySelectorAll('.resources-input');
+            inputs.forEach(input => {
+                input.addEventListener('focus', () => input.nextElementSibling.style.display = 'block');
+                input.addEventListener('blur', (e) => setTimeout(() => e.target.nextElementSibling.style.display = 'none', 200));
+                syncChecklist(input, input.name.includes('machines') ? 'machines' : 'humans');
+            });
+        }
+
+        function addMaterialRow(data = {}) {
+            const tbody = document.getElementById('materials-body');
+            if (!tbody) {
+                console.error('materials-body not found');
+                return;
+            }
+            console.log('addMaterialRow called with:', data);
+            const rowCount = tbody.getElementsByTagName('tr').length;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" name="materials[${rowCount}][description]" value="${data.description || ''}" required></td>
+                <td><input type="number" name="materials[${rowCount}][quantity]" value="${data.quantity || ''}" min="0" step="0.1" required></td>
+                <td><input type="text" name="materials[${rowCount}][unit]" value="${data.unit || ''}" required></td>
+                <td>
+                    <button type="button" class="delete-btn" onclick="deleteRow(this)" ${data.description ? '' : 'style="display: none;"'}>Delete</button>
+                    <button type="button" class="cancel-btn" onclick="cancelRow(this)" ${data.description ? 'style="display: none;"' : ''}>Cancel</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        function generateChecklist(rowIndex, type) {
+            let html = '';
+            try {
+                if (type === 'machines') {
+                    {% for group in machine_groups %}
+                        html += `<label><input type="checkbox" class="resource-checkbox" data-row="${rowIndex}" data-type="machines" value="{{ group.name }}" onchange="syncText(this)"> {{ group.name }}</label><br>`;
+                    {% endfor %}
+                    html += '<hr style="margin: 5px 0;">';
+                    {% for resource in machine_resources %}
+                        html += `<label><input type="checkbox" class="resource-checkbox" data-row="${rowIndex}" data-type="machines" value="{{ resource.name }}" onchange="syncText(this)"> {{ resource.name }}</label><br>`;
+                    {% endfor %}
+                } else if (type === 'humans') {
+                    {% for group in human_groups %}
+                        html += `<label><input type="checkbox" class="resource-checkbox" data-row="${rowIndex}" data-type="humans" value="{{ group.name }}" onchange="syncText(this)"> {{ group.name }}</label><br>`;
+                    {% endfor %}
+                    html += '<hr style="margin: 5px 0;">';
+                    {% for resource in human_resources %}
+                        html += `<label><input type="checkbox" class="resource-checkbox" data-row="${rowIndex}" data-type="humans" value="{{ resource.name }}" onchange="syncText(this)"> {{ resource.name }}</label><br>`;
+                    {% endfor %}
+                }
+            } catch (e) {
+                console.error('Error generating checklist:', e);
+            }
+            return html;
+        }
+
+        function syncChecklist(input, type) {
+            const checklist = input.nextElementSibling;
+            const values = input.value.split(',').map(v => v.trim()).filter(v => v);
+            checklist.querySelectorAll('.resource-checkbox').forEach(cb => {
+                cb.checked = values.includes(cb.value);
+            });
+        }
+
+        function syncText(checkbox) {
+            const checklist = checkbox.closest('.resource-checklist');
+            const input = checklist.previousElementSibling;
+            if (!input) {
+                console.error('Input not found for checkbox:', checkbox.value);
+                return;
+            }
+            const type = checkbox.dataset.type;
+            const checked = Array.from(checklist.querySelectorAll(`.resource-checkbox[data-type="${type}"]:checked`))
+                .map(cb => cb.value);
+            input.value = checked.join(', ');
+        }
+
+        function deleteRow(button) {
+            if (confirm('Are you sure you want to delete this row?')) {
+                button.closest('tr').remove();
             }
         }
+
+        function cancelRow(button) {
+            const row = button.closest('tr');
+            if (!row.querySelector('input[type="text"]').value) {
+                row.remove();
+            } else {
+                button.style.display = 'none';
+                row.querySelector('.delete-btn').style.display = 'inline';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if selected_job %}
+                {% for task in tasks %}
+                    addTaskRow({
+                        task_number: '{{ task.task_number }}',
+                        description: '{{ task.description }}',
+                        setup_time: {{ task.setup_time }},
+                        time_each: {{ task.time_each }},
+                        predecessors: '{{ task.predecessors }}',
+                        resources: '{{ task.resources }}',
+                        completed: {{ 'true' if task.completed else 'false' }}
+                    });
+                {% endfor %}
+                {% for material in materials %}
+                    addMaterialRow({
+                        description: '{{ material.description }}',
+                        quantity: {{ material.quantity }},
+                        unit: '{{ material.unit }}'
+                    });
+                {% endfor %}
+                mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+            {% endif %}
+
+            document.querySelectorAll('.resources-input').forEach(input => {
+                syncChecklist(input, input.name.includes('machines') ? 'machines' : 'humans');
+            });
+        });
     </script>
+    <style>
+        .resource-checklist { 
+            z-index: 10; 
+            width: 10vw; 
+            max-height: 25vh; 
+            overflow-y: auto; 
+        }
+        .delete-btn, .cancel-btn { margin: 0 5px; }
+        .resource-cell { position: relative; }
+        .mermaid { 
+            margin-top: 20px; 
+            text-align: center; 
+        }
+    </style>
 </head>
 <body>
-    <h1>Review Jobs</h1>
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
+    <div class="container">
+        <h1>Review Jobs</h1>
+        <button onclick="window.location.href='{{ url_for('index') }}'">Home</button>
+        <button onclick="window.location.href='{{ url_for('add_job_with_tasks') }}'">Add Job</button>
 
-    <div class="job-selector">
-        <label for="job_select">Select Job:</label>
-        <select id="job_select" name="job_number" onchange="loadJob(this.value)">
-            <option value="">-- Select a Job --</option>
-            {% for job in jobs %}
-                <option value="{{ job.job_number }}" {% if job.job_number == selected_job %}selected{% endif %}>
-                    {{ job.job_number }} - {{ job.description }}
-                </option>
-            {% endfor %}
-        </select>
-    </div>
-
-    {% if selected_job %}
-    <div class="job-details">
-        <h2>Job Details: {{ selected_job }}</h2>
-        <p><strong>Description:</strong> {{ job.description }}</p>
-        <p><strong>Order Date:</strong> {{ job.order_date or 'N/A' }}</p>
-        <p><strong>Promised Date:</strong> {{ job.promised_date or 'N/A' }}</p>
-        <p><strong>Quantity:</strong> {{ job.quantity }}</p>
-        <p><strong>Price Each:</strong> R {{ "%.2f"|format(job.price_each) }}</p>
-        <p><strong>Customer:</strong> {{ job.customer or 'N/A' }}</p>
-        <p><strong>Blocked:</strong> 
-        <input type="checkbox" onchange="toggleJobBlocked('{{ job.job_number }}', this.checked)" 
-               {% if job.blocked %}checked{% endif %}>
-        </p>
-    </div>
-
-    <script>
-    function toggleJobBlocked(jobNumber, blocked) {
-        fetch('/toggle_job_blocked/' + jobNumber, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ blocked: blocked })
-        })
-        .then(response => response.json())
-        .then(() => location.reload())
-        .catch(error => console.error('Error:', error));
-    }
-    </script>
-
-    <h2>Tasks</h2>
-    <table class="tasks-table">
-        <thead>
-            <tr>
-                <th>Task Number</th>
-                <th>Description</th>
-                <th>Setup Time (min)</th>
-                <th>Time Each (min)</th>
-                <th>Predecessors</th>
-                <th>Resources</th>
-                <th>Completed</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for task in tasks %}
-            <tr id="task-row-{{ task.task_number }}">
-                <td>{{ task.task_number }}</td>
-                <td>{{ task.description }}</td>
-                <td>{{ task.setup_time }}</td>
-                <td>{{ task.time_each }}</td>
-                <td>{{ task.predecessors or '' }}</td>
-                <td>{{ task.resources }}</td>
-                <td>
-                    <input type="checkbox" onchange="toggleTaskCompleted('{{ task.task_number }}', this.checked)" 
-                           {% if task.completed %}checked{% endif %}>
-                </td>
-                <td>
-                    <button onclick="showEditForm('{{ task.task_number }}')">Edit</button>
-                    <button onclick="deleteTask('{{ task.task_number }}')">Delete</button>
-                </td>
-            </tr>
-            <tr class="edit-form" id="edit-form-{{ task.task_number }}">
-                <td><input type="text" name="task_number" value="{{ task.task_number }}" readonly></td>
-                <td><input type="text" name="description" value="{{ task.description }}"></td>
-                <td><input type="number" name="setup_time" value="{{ task.setup_time }}" min="0"></td>
-                <td><input type="number" name="time_each" value="{{ task.time_each }}" min="0"></td>
-                <td><input type="text" name="predecessors" value="{{ task.predecessors or '' }}"></td>
-                <td><input type="text" name="resources" value="{{ task.resources }}"></td>
-                <td></td>
-                <td>
-                    <button onclick="updateTask('{{ task.task_number }}')">Save</button>
-                    <button onclick="hideEditForm('{{ task.task_number }}')">Cancel</button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <h2>Task Flowchart</h2>
-    <div id="flowchart" class="mermaid">
-        {% if tasks %}
-            graph LR
-            {% for task in tasks %}
-                {{ task.task_number }}["{{ task.task_number }}<br>{{ task.description }}"]
-                {% if task.completed %}
-                    class {{ task.task_number }} completed;
-                {% endif %}
-                {% if task.predecessors %}
-                    {% for pred in task.predecessors.split(',') %}
-                        {% set trimmed_pred = pred|trim %}
-                        {% if trimmed_pred in tasks|map(attribute='task_number') %}
-                            {{ trimmed_pred }} --> {{ task.task_number }}
-                        {% endif %}
-                    {% endfor %}
-                {% endif %}
-            {% endfor %}
-            classDef completed fill:#d4edda,stroke:#333;
-        {% else %}
-            graph LR
-            A[No Tasks Available]
+        {% if error %}
+            <p style="color: red;">{{ error }}</p>
         {% endif %}
+
+        <form method="POST" action="{{ url_for('review_jobs', include_completed=include_completed) }}">
+            <label for="job_number">Select Job:</label>
+            <select id="job_number" name="job_number" onchange="this.form.submit()">
+                <option value="">-- Select a Job --</option>
+                {% for job in jobs %}
+                    <option value="{{ job.job_number }}" {% if selected_job and selected_job.job_number == job.job_number %}selected{% endif %}>
+                        {{ job.job_number }} - {{ job.description }} {% if job.completed %}[Completed]{% endif %}
+                    </option>
+                {% endfor %}
+            </select><br>
+            <label for="include_completed">
+                <input type="checkbox" id="include_completed" name="include_completed" onchange="updateJobDropdown()" {% if include_completed %}checked{% endif %}>
+                Include completed jobs
+            </label>
+
+            {% if selected_job %}
+                <h2>Job Details</h2>
+                <label for="description">Description:</label>
+                <input type="text" id="description" name="description" value="{{ selected_job.description }}"><br>
+                <label for="order_date">Order Date:</label>
+                <input type="datetime-local" id="order_date" name="order_date" value="{{ selected_job.order_date.strftime('%Y-%m-%dT%H:%M') if selected_job.order_date else '' }}"><br>
+                <label for="promised_date">Promised Date:</label>
+                <input type="datetime-local" id="promised_date" name="promised_date" value="{{ selected_job.promised_date.strftime('%Y-%m-%dT%H:%M') if selected_job.promised_date else '' }}"><br>
+                <label for="quantity">Quantity:</label>
+                <input type="number" id="quantity" name="quantity" min="1" value="{{ selected_job.quantity }}" required><br>
+                <label for="price_each">Price Each:</label>
+                <input type="number" id="price_each" name="price_each" min="0" step="0.01" value="{{ selected_job.price_each }}" required><br>
+                <label for="customer">Customer:</label>
+                <input type="text" id="customer" name="customer" value="{{ selected_job.customer }}"><br>
+                <label for="blocked">Block Job:</label>
+                <input type="checkbox" id="blocked" name="blocked" {% if selected_job.blocked %}checked{% endif %}><br>
+
+                <h2>Tasks</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Task Number</th>
+                            <th>Description</th>
+                            <th>Setup Time (min)</th>
+                            <th>Time Each (min)</th>
+                            <th>Predecessors</th>
+                            <th>Machines</th>
+                            <th>Humans</th>
+                            <th>Completed</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tasks-body">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+                <button type="button" onclick="addTaskRow()">Add Task</button>
+
+                <h2>Materials</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Quantity</th>
+                            <th>Unit</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="materials-body">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+                <button type="button" onclick="addMaterialRow()">Add Material</button>
+
+                <h2>Task Flowchart</h2>
+                <div id="flowchart" class="mermaid">
+                    {% if tasks %}
+                        graph LR
+                        {% for task in tasks %}
+                            {{ task.task_number }}["{{ task.task_number }}<br>{{ task.description }}"]
+                            {% if task.completed %}
+                                class {{ task.task_number }} completed;
+                            {% endif %}
+                            {% if task.predecessors %}
+                                {% for pred in task.predecessors.split(',') %}
+                                    {% set trimmed_pred = pred|trim %}
+                                    {% if trimmed_pred in tasks|map(attribute='task_number') %}
+                                        {{ trimmed_pred }} --> {{ task.task_number }}
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+                        classDef completed fill:#d4edda,stroke:#333;
+                    {% else %}
+                        graph LR
+                        A[No Tasks Available]
+                    {% endif %}
+                </div>
+
+                <br><button type="submit" name="update">Update Job</button>
+            {% endif %}
+        </form>
     </div>
-    {% endif %}
-
-    <script>
-        function showEditForm(taskNumber) {
-            document.getElementById('task-row-' + taskNumber).style.display = 'none';
-            document.getElementById('edit-form-' + taskNumber).style.display = 'table-row';
-        }
-
-        function hideEditForm(taskNumber) {
-            document.getElementById('task-row-' + taskNumber).style.display = 'table-row';
-            document.getElementById('edit-form-' + taskNumber).style.display = 'none';
-        }
-
-        function updateTask(taskNumber) {
-            const row = document.getElementById('edit-form-' + taskNumber);
-            const data = {
-                task_number: row.querySelector('input[name="task_number"]').value,
-                description: row.querySelector('input[name="description"]').value,
-                setup_time: row.querySelector('input[name="setup_time"]').value,
-                time_each: row.querySelector('input[name="time_each"]').value,
-                predecessors: row.querySelector('input[name="predecessors"]').value,
-                resources: row.querySelector('input[name="resources"]').value
-            };
-            fetch('/update_task/' + taskNumber, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            })
-            .then(response => response.json())
-            .then(() => location.reload())
-            .catch(error => console.error('Error:', error));
-        }
-
-        function deleteTask(taskNumber) {
-            if (confirm('Are you sure you want to delete task ' + taskNumber + '?')) {
-                fetch('/delete_task/' + taskNumber, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                })
-                .then(response => response.json())
-                .then(() => location.reload())
-                .catch(error => console.error('Error:', error));
-            }
-        }
-
-        function toggleTaskCompleted(taskNumber, completed) {
-            fetch('/toggle_task_completed/' + taskNumber, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ completed: completed })
-            })
-            .then(response => response.json())
-            .then(() => location.reload())
-            .catch(error => console.error('Error:', error));
-        }
-
-        // Initialize Mermaid
-        mermaid.initialize({ startOnLoad: true });
-    </script>
 </body>
 </html>

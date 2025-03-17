@@ -11,8 +11,8 @@
                 <td><input type="text" name="task_number" value="${taskNumber}" form="edit_${taskNumber}"></td>
                 <td><input type="text" name="job_number" value="${row.cells[1].textContent}" form="edit_${taskNumber}"></td>
                 <td><input type="text" name="description" value="${row.cells[2].textContent}" form="edit_${taskNumber}"></td>
-                <td><input type="number" name="setup_time" value="${row.cells[3].textContent}" form="edit_${taskNumber}"></td>
-                <td><input type="number" name="time_each" value="${row.cells[4].textContent}" form="edit_${taskNumber}"></td>
+                <td><input type="number" name="setup_time" value="${row.cells[3].textContent}" form="edit_${taskNumber}"> step="0.1"</td>
+                <td><input type="number" name="time_each" value="${row.cells[4].textContent}" form="edit_${taskNumber}"> step="0.1"</td>
                 <td><input type="text" name="predecessors" value="${row.cells[5].textContent}" form="edit_${taskNumber}"></td>
                 <td><input type="text" name="resources" value="${row.cells[6].textContent}" form="edit_${taskNumber}"></td>
                 <td><input type="checkbox" name="completed" form="edit_${taskNumber}" ${row.cells[7].querySelector('input').checked ? 'checked' : ''}></td>
@@ -65,8 +65,8 @@
             {% endfor %}
         </select><br>
         <label>Description:</label><input type="text" name="description"><br>
-        <label>Setup Time (min):</label><input type="number" name="setup_time" min="0" required><br>
-        <label>Time Each (min/unit):</label><input type="number" name="time_each" min="0" required><br>
+        <label>Setup Time (min):</label><input type="number" name="setup_time" min="0" step="0.1" required><br>
+        <label>Time Each (min/unit):</label><input type="number" name="time_each" min="0" step="0.1" required><br>
         <label>Predecessors:</label><input type="text" name="predecessors" placeholder="comma-separated task numbers"><br>
         <label>Resources:</label><input type="text" name="resources" placeholder="comma-separated resources" required><br>
         <label>Completed:</label><input type="checkbox" name="completed"><br>

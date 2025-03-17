@@ -7,8 +7,8 @@
 </head>
 <body>
     <div class="container">
-        <button onclick="window.location.href='{{ url_for('index') }}'">Home</button>
         <h1>Production Schedule</h1>
+        <button onclick="window.location.href='{{ url_for('index') }}'">Home</button>
         
         <form method="GET" action="{{ url_for('production_schedule') }}">
             <label for="days">Number of Days:</label>

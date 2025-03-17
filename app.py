@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, jsonify, send_file  # Added send_file
+from flask import Flask, request, render_template, redirect, url_for, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta, time
 import random
@@ -12,7 +12,7 @@ from sqlalchemy.sql import text
 import math
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///jobshop.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:admin@localhost:5432/jobshop'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -39,8 +39,8 @@ class Task(db.Model):
     task_number = db.Column(db.String(50), unique=True, nullable=False)
     job_number = db.Column(db.String(50), db.ForeignKey('job.job_number'), nullable=False)
     description = db.Column(db.String(255))
-    setup_time = db.Column(db.Integer, nullable=False)
-    time_each = db.Column(db.Integer, nullable=False)
+    setup_time = db.Column(db.Float, nullable=False)
+    time_each = db.Column(db.Float, nullable=False)
     predecessors = db.Column(db.String(255))
     resources = db.Column(db.String(255), nullable=False)
     completed = db.Column(db.Boolean, default=False, nullable=False)
@@ -53,6 +53,7 @@ class Resource(db.Model):
 class ResourceGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
+    type = db.Column(db.String(1), nullable=False)
     resources = db.relationship('Resource', secondary='resource_group_association')
 
 class Calendar(db.Model):
@@ -60,6 +61,36 @@ class Calendar(db.Model):
     weekday = db.Column(db.Integer, unique=True, nullable=False)
     start_time = db.Column(db.Time, nullable=False)
     end_time = db.Column(db.Time, nullable=False)
+
+class Material(db.Model):
+    id = db.Column(db.Integer, primary_key=True)  # Incremental ID
+    job_number = db.Column(db.String(50), db.ForeignKey('job.job_number'), nullable=False)
+    description = db.Column(db.String(255), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)  # e.g., 5.5 units
+    unit = db.Column(db.String(50), nullable=False)  # e.g., "kg", "meters"
+
+class Template(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)  # e.g., "MLR10"
+    description = db.Column(db.String(255))
+    price_each = db.Column(db.Float, nullable=True)
+
+class TemplateTask(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('template.id'), nullable=False)
+    task_number = db.Column(db.String(50), nullable=False)
+    description = db.Column(db.String(255))
+    setup_time = db.Column(db.Float, nullable=False)
+    time_each = db.Column(db.Float, nullable=False)
+    predecessors = db.Column(db.String(255))
+    resources = db.Column(db.String(255), nullable=False)
+
+class TemplateMaterial(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('template.id'), nullable=False)
+    description = db.Column(db.String(255), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    unit = db.Column(db.String(50), nullable=False)
 
 resource_group_association = db.Table(
     'resource_group_association',
@@ -318,8 +349,8 @@ def add_task():
                         task_number=str(row['Task Number']),
                         job_number=str(row['Job Number']),
                         description=str(row.get('Description', '')),
-                        setup_time=int(row['Setup Time']),
-                        time_each=int(row['Time Each']),
+                        setup_time=float(row['Setup Time']),
+                        time_each=float(row['Time Each']),
                         predecessors=str(row.get('Predecessors', '')),
                         resources=str(row['Resources']),
                         completed=bool(row.get('Completed', False))
@@ -332,8 +363,8 @@ def add_task():
                 task_number=request.form['task_number'],
                 job_number=request.form['job_number'],
                 description=request.form['description'],
-                setup_time=int(request.form['setup_time']),
-                time_each=int(request.form['time_each']),
+                setup_time=float(request.form['setup_time']),
+                time_each=float(request.form['time_each']),
                 predecessors=request.form['predecessors'],
                 resources=request.form['resources'],
                 completed='completed' in request.form
@@ -344,20 +375,71 @@ def add_task():
         return redirect(url_for('add_task'))
     return render_template('add_task.html', tasks=Task.query.all(), jobs=Job.query.all())
 
+@app.route('/add_single_task/<job_number>', methods=['POST'])
+def add_single_task(job_number):
+    data = request.get_json()
+    task = Task(
+        task_number=data['task_number'],
+        job_number=job_number,
+        description=data.get('description', ''),
+        setup_time=float(data['setup_time']),
+        time_each=float(data['time_each']),
+        predecessors=data.get('predecessors', ''),
+        resources=data['resources'],
+        completed=data.get('completed', False)
+    )
+    if Task.query.filter_by(task_number=task.task_number).first():
+        return jsonify({"success": False, "error": f"Task number '{task.task_number}' already exists."}), 400
+    db.session.add(task)
+    db.session.commit()
+    update_job_completion(job_number)
+    return jsonify({"success": True})
+
+@app.route('/add_single_material/<job_number>', methods=['POST'])
+def add_single_material(job_number):
+    data = request.get_json()
+    material = Material(
+        job_number=job_number,
+        description=data['description'],
+        quantity=float(data['quantity']),
+        unit=data['unit']
+    )
+    db.session.add(material)
+    db.session.commit()
+    return jsonify({"success": True})
+
+@app.route('/update_material/<int:material_id>', methods=['POST'])
+def update_material(material_id):
+    material = Material.query.get_or_404(material_id)
+    data = request.get_json()
+    material.description = data['description']
+    material.quantity = float(data['quantity'])
+    material.unit = data['unit']
+    db.session.commit()
+    return jsonify({"success": True})
+
+@app.route('/delete_material/<int:material_id>', methods=['POST'])
+def delete_material(material_id):
+    material = Material.query.get_or_404(material_id)
+    db.session.delete(material)
+    db.session.commit()
+    return jsonify({"success": True})
+
 @app.route('/update_task/<task_number>', methods=['POST'])
 def update_task(task_number):
     task = Task.query.filter_by(task_number=task_number).first_or_404()
-    task.task_number = request.form['task_number']
-    task.job_number = request.form['job_number']
-    task.description = request.form['description']
-    task.setup_time = int(request.form['setup_time'])
-    task.time_each = int(request.form['time_each'])
-    task.predecessors = request.form['predecessors']
-    task.resources = request.form['resources']
-    task.completed = 'completed' in request.form
+    data = request.get_json()  # Parse JSON data from the request
+    task.task_number = data['task_number']
+    task.job_number = data['job_number']
+    task.description = data['description']
+    task.setup_time = float(data['setup_time'])
+    task.time_each = float(data['time_each'])
+    task.predecessors = data['predecessors']
+    task.resources = data['resources']
+    task.completed = data.get('completed', task.completed)  # Preserve existing value if not provided
     db.session.commit()
     update_job_completion(task.job_number)
-    return redirect(url_for('add_task'))
+    return jsonify({"success": True})
 
 @app.route('/delete_task/<task_number>', methods=['POST'])
 def delete_task(task_number):
@@ -803,26 +885,248 @@ def export_production_schedule():
 
 @app.route('/add_job_with_tasks', methods=['GET', 'POST'])
 def add_job_with_tasks():
+    templates = Template.query.all()
+    jobs = Job.query.all()
+    # Split resources and groups by type
+    machine_resources = Resource.query.filter_by(type='M').all()
+    human_resources = Resource.query.filter_by(type='H').all()
+    machine_groups = ResourceGroup.query.filter_by(type='M').all()
+    human_groups = ResourceGroup.query.filter_by(type='H').all()
+
     if request.method == 'POST':
-        order_date = request.form.get('order_date')
-        promised_date = request.form.get('promised_date')
+        order_date_str = request.form.get('order_date')
+        promised_date_str = request.form.get('promised_date')
+        order_date = datetime.fromisoformat(order_date_str) if order_date_str else None
+        promised_date = datetime.fromisoformat(promised_date_str) if promised_date_str else None
+
         job = Job(
             job_number=request.form['job_number'],
-            description=request.form['description'],
-            order_date=datetime.strptime(order_date, '%Y-%m-%dT%H:%M') if order_date else None,
-            promised_date=datetime.strptime(promised_date, '%Y-%m-%dT%H:%M') if promised_date else None,
+            description=request.form.get('description', ''),
+            order_date=order_date,
+            promised_date=promised_date,
             quantity=int(request.form['quantity']),
             price_each=float(request.form['price_each']),
-            customer=request.form['customer'],
-            blocked='blocked' in request.form  # Add blocked status
+            customer=request.form.get('customer', ''),
+            blocked='blocked' in request.form
         )
-        # Rest of the function unchanged until commit
+        if Job.query.filter_by(job_number=job.job_number).first():
+            return render_template('add_job_with_tasks.html', templates=templates, jobs=jobs, 
+                                 machine_resources=machine_resources, human_resources=human_resources,
+                                 machine_groups=machine_groups, human_groups=human_groups,
+                                 error=f"Job number '{job.job_number}' already exists.")
+
+        Task.query.filter_by(job_number=job.job_number).delete()
+        Material.query.filter_by(job_number=job.job_number).delete()
+
+        tasks_data = {}
+        materials_data = {}
+        for key in request.form:
+            if key.startswith('tasks['):
+                parts = key[6:-1].split('][')
+                index, field = parts[0], parts[1]
+                if index not in tasks_data:
+                    tasks_data[index] = {}
+                tasks_data[index][field] = request.form[key]
+            elif key.startswith('materials['):
+                parts = key[10:-1].split('][')
+                index, field = parts[0], parts[1]
+                if index not in materials_data:
+                    materials_data[index] = {}
+                materials_data[index][field] = request.form[key]
+
+        # Combine machine and human resources into a single string for validation
+        valid_resources = {r.name for r in Resource.query.all()}
+        valid_groups = {g.name for g in ResourceGroup.query.all()}
+        all_valid = valid_resources.union(valid_groups)
+
+        for index, task_info in tasks_data.items():
+            # Combine machines and humans for validation
+            resources = ','.join(filter(None, [task_info.get('machines', ''), task_info.get('humans', '')])).split(',')
+            invalid = [r.strip() for r in resources if r.strip() and r.strip() not in all_valid]
+            if invalid:
+                return render_template('add_job_with_tasks.html', templates=templates, jobs=jobs, 
+                                     machine_resources=machine_resources, human_resources=human_resources,
+                                     machine_groups=machine_groups, human_groups=human_groups,
+                                     error=f"Invalid resources in task {task_info['task_number']}: {', '.join(invalid)}")
+
+        db.session.add(job)
+        for index, task_info in tasks_data.items():
+            combined_resources = ','.join(filter(None, [task_info.get('machines', ''), task_info.get('humans', '')]))
+            task = Task(
+                task_number=task_info['task_number'],
+                job_number=job.job_number,
+                description=task_info.get('description', ''),
+                setup_time=float(task_info['setup_time']),
+                time_each=float(task_info['time_each']),
+                predecessors=task_info.get('predecessors', ''),
+                resources=combined_resources,
+                completed='completed' in task_info
+            )
+            if Task.query.filter_by(task_number=task.task_number).first():
+                db.session.rollback()
+                return render_template('add_job_with_tasks.html', templates=templates, jobs=jobs, 
+                                     machine_resources=machine_resources, human_resources=human_resources,
+                                     machine_groups=machine_groups, human_groups=human_groups,
+                                     error=f"Task number '{task.task_number}' already exists.")
+            db.session.add(task)
+
+        for index, material_info in materials_data.items():
+            material = Material(
+                job_number=job.job_number,
+                description=material_info['description'],
+                quantity=float(material_info['quantity']),
+                unit=material_info['unit']
+            )
+            db.session.add(material)
+
         db.session.commit()
         return redirect(url_for('add_job_with_tasks'))
-    return render_template('add_job_with_tasks.html', 
-                          jobs=Job.query.all(), 
-                          resources=Resource.query.all(),
-                          resource_groups=ResourceGroup.query.all())
+
+    return render_template('add_job_with_tasks.html', templates=templates, jobs=jobs, 
+                         machine_resources=machine_resources, human_resources=human_resources,
+                         machine_groups=machine_groups, human_groups=human_groups)
+
+@app.route('/get_template_data/<int:template_id>', methods=['GET'])
+def get_template_data(template_id):
+    template = Template.query.get_or_404(template_id)
+    job_number = request.args.get('job_number', '')
+    tasks = TemplateTask.query.filter_by(template_id=template.id).all()
+    materials = TemplateMaterial.query.filter_by(template_id=template.id).all()
+    data = {
+        'template_description': template.description or template.name,
+        'template_price_each': template.price_each,
+        'tasks': [{
+            'task_number': f"{job_number}-{t.task_number}",
+            'description': t.description or '',
+            'setup_time': t.setup_time,
+            'time_each': t.time_each,
+            'predecessors': ', '.join(f"{job_number}-{p.strip()}" for p in t.predecessors.split(',')) if t.predecessors else '',
+            'resources': t.resources,
+            'completed': False
+        } for t in tasks],
+        'materials': [{
+            'description': m.description,
+            'quantity': m.quantity,  # Base quantity, scaled in JS
+            'unit': m.unit
+        } for m in materials]
+    }
+    return jsonify(data)
+
+@app.route('/add_template', methods=['GET', 'POST'])
+def add_template():
+    if request.method == 'POST':
+        template = Template(
+            name=request.form['name'],
+            description=request.form['description'],
+            price_each=float(request.form['price_each']) if request.form.get('price_each') else None
+        )
+        if Template.query.filter_by(name=template.name).first():
+            return render_template('add_template.html', templates=Template.query.all(), error=f"Template '{template.name}' already exists.")
+        
+        db.session.add(template)
+        db.session.flush()  # Get template.id before commit
+
+        tasks_data = {}
+        materials_data = {}
+        for key in request.form:
+            if key.startswith('tasks['):
+                parts = key.split('[')
+                index = int(parts[1].rstrip(']'))
+                field = parts[2].rstrip(']')
+                if index not in tasks_data:
+                    tasks_data[index] = {}
+                tasks_data[index][field] = request.form[key]
+            elif key.startswith('materials['):
+                parts = key.split('[')
+                index = int(parts[1].rstrip(']'))
+                field = parts[2].rstrip(']')
+                if index not in materials_data:
+                    materials_data[index] = {}
+                materials_data[index][field] = request.form[key]
+
+        for index, task_info in tasks_data.items():
+            task = TemplateTask(
+                template_id=template.id,
+                task_number=task_info['task_number'],
+                description=task_info.get('description', ''),
+                setup_time=float(task_info['setup_time']),
+                time_each=float(task_info['time_each']),
+                predecessors=task_info.get('predecessors', ''),
+                resources=task_info['resources']
+            )
+            db.session.add(task)
+
+        for index, material_info in materials_data.items():
+            material = TemplateMaterial(
+                template_id=template.id,
+                description=material_info['description'],
+                quantity=float(material_info['quantity']),
+                unit=material_info['unit']
+            )
+            db.session.add(material)
+
+        db.session.commit()
+        return redirect(url_for('add_template'))
+
+    return render_template('add_template.html', templates=Template.query.all())
+
+@app.route('/edit_template/<int:template_id>', methods=['GET', 'POST'])
+def edit_template(template_id):
+    template = Template.query.get_or_404(template_id)
+    
+    if request.method == 'POST':
+        template.name = request.form['name']
+        template.description = request.form['description']
+        template.price_each = float(request.form['price_each']) if request.form.get('price_each') else None        
+        # Delete existing tasks and materials
+        TemplateTask.query.filter_by(template_id=template.id).delete()
+        TemplateMaterial.query.filter_by(template_id=template.id).delete()
+
+        tasks_data = {}
+        materials_data = {}
+        for key in request.form:
+            if key.startswith('tasks['):
+                parts = key.split('[')
+                index = int(parts[1].rstrip(']'))
+                field = parts[2].rstrip(']')
+                if index not in tasks_data:
+                    tasks_data[index] = {}
+                tasks_data[index][field] = request.form[key]
+            elif key.startswith('materials['):
+                parts = key.split('[')
+                index = int(parts[1].rstrip(']'))
+                field = parts[2].rstrip(']')
+                if index not in materials_data:
+                    materials_data[index] = {}
+                materials_data[index][field] = request.form[key]
+
+        for index, task_info in tasks_data.items():
+            task = TemplateTask(
+                template_id=template.id,
+                task_number=task_info['task_number'],
+                description=task_info.get('description', ''),
+                setup_time=float(task_info['setup_time']),
+                time_each=float(task_info['time_each']),
+                predecessors=task_info.get('predecessors', ''),
+                resources=task_info['resources']
+            )
+            db.session.add(task)
+
+        for index, material_info in materials_data.items():
+            material = TemplateMaterial(
+                template_id=template.id,
+                description=material_info['description'],
+                quantity=float(material_info['quantity']),
+                unit=material_info['unit']
+            )
+            db.session.add(material)
+
+        db.session.commit()
+        return redirect(url_for('add_template'))
+
+    tasks = TemplateTask.query.filter_by(template_id=template.id).all()
+    materials = TemplateMaterial.query.filter_by(template_id=template.id).all()
+    return render_template('edit_template.html', template=template, tasks=tasks, materials=materials)
 
 @app.route('/validate_resources', methods=['POST'])
 def validate_resources():
@@ -844,36 +1148,123 @@ def validate_resources():
     
     return jsonify({'invalid': invalid_entries})
 
-@app.route('/review_jobs', methods=['GET'])
+@app.route('/review_jobs', methods=['GET', 'POST'])
 def review_jobs():
-    jobs = Job.query.all()
-    selected_job_number = request.args.get('job_number')
-    job = None
+    include_completed = request.args.get('include_completed', 'false').lower() == 'true'
+    if include_completed:
+        jobs = Job.query.all()
+    else:
+        jobs = Job.query.filter_by(completed=False).all()
+
+    machine_resources = Resource.query.filter_by(type='M').all()
+    human_resources = Resource.query.filter_by(type='H').all()
+    machine_groups = ResourceGroup.query.filter_by(type='M').all()
+    human_groups = ResourceGroup.query.filter_by(type='H').all()
+
+    selected_job = None
     tasks = []
-    tasks_json = []
+    materials = []
 
-    if selected_job_number:
-        job = Job.query.filter_by(job_number=selected_job_number).first()
-        if job:
-            tasks = Task.query.filter_by(job_number=job.job_number).all()
-            tasks_json = [
-                {
-                    'task_number': task.task_number,
-                    'description': task.description,
-                    'setup_time': task.setup_time,
-                    'time_each': task.time_each,
-                    'predecessors': task.predecessors,
-                    'resources': task.resources,
-                    'completed': task.completed
-                } for task in tasks
-            ]
+    # Handle job selection via POST or GET
+    job_number = request.form.get('job_number') if request.method == 'POST' else request.args.get('job_number')
+    print(f"Method: {request.method}, Job number: {job_number}")
+    if job_number:
+        selected_job = Job.query.filter_by(job_number=job_number).first()
+        print(f"Selected job: {selected_job.job_number if selected_job else 'None'}")
+        if selected_job:
+            tasks = Task.query.filter_by(job_number=job_number).all()
+            materials = Material.query.filter_by(job_number=job_number).all()
 
-    return render_template('review_jobs.html',
-                          jobs=jobs,
-                          selected_job=selected_job_number,
-                          job=job,
-                          tasks=tasks,
-                          tasks_json=json.dumps(tasks_json))
+    if request.method == 'POST' and 'update' in request.form and selected_job:
+        # Update job fields
+        selected_job.description = request.form.get('description', '')
+        order_date_str = request.form.get('order_date')
+        promised_date_str = request.form.get('promised_date')
+        selected_job.order_date = datetime.fromisoformat(order_date_str) if order_date_str else None
+        selected_job.promised_date = datetime.fromisoformat(promised_date_str) if promised_date_str else None
+        selected_job.quantity = int(request.form['quantity'])
+        selected_job.price_each = float(request.form['price_each'])
+        selected_job.customer = request.form.get('customer', '')
+        selected_job.blocked = 'blocked' in request.form
+        selected_job.completed = 'completed' in request.form
+
+        # Parse tasks and materials from form
+        tasks_data = {}
+        materials_data = {}
+        for key in request.form:
+            if key.startswith('tasks['):
+                parts = key[6:-1].split('][')
+                index, field = parts[0], parts[1]
+                if index not in tasks_data:
+                    tasks_data[index] = {}
+                tasks_data[index][field] = request.form[key]
+            elif key.startswith('materials['):
+                parts = key[10:-1].split('][')
+                index, field = parts[0], parts[1]
+                if index not in materials_data:
+                    materials_data[index] = {}
+                materials_data[index][field] = request.form[key]
+
+        # Update or add tasks
+        existing_tasks = {task.task_number: task for task in tasks}
+        valid_resources = {r.name for r in Resource.query.all()}
+        valid_groups = {g.name for g in ResourceGroup.query.all()}
+        all_valid = valid_resources.union(valid_groups)
+
+        submitted_task_numbers = {task_info['task_number'] for task_info in tasks_data.values()}
+        for task in tasks:
+            if task.task_number not in submitted_task_numbers:
+                db.session.delete(task)
+
+        for index, task_info in tasks_data.items():
+            resources = ','.join(filter(None, [task_info.get('machines', ''), task_info.get('humans', '')]))
+            invalid = [r.strip() for r in resources.split(',') if r.strip() and r.strip() not in all_valid]
+            if invalid:
+                return render_template('review_jobs.html', jobs=jobs, selected_job=selected_job, tasks=tasks, materials=materials,
+                                     include_completed=include_completed, machine_resources=machine_resources, human_resources=human_resources,
+                                     machine_groups=machine_groups, human_groups=human_groups,
+                                     error=f"Invalid resources in task {task_info['task_number']}: {', '.join(invalid)}")
+            task_number = task_info['task_number']
+            if task_number in existing_tasks:
+                # Update existing task
+                task = existing_tasks[task_number]
+                task.description = task_info.get('description', '')
+                task.setup_time = float(task_info['setup_time'])
+                task.time_each = float(task_info['time_each'])
+                task.predecessors = task_info.get('predecessors', '')
+                task.resources = resources
+                task.completed = 'completed' in task_info
+            else:
+                # Add new task
+                task = Task(
+                    task_number=task_number,
+                    job_number=job_number,
+                    description=task_info.get('description', ''),
+                    setup_time=float(task_info['setup_time']),
+                    time_each=float(task_info['time_each']),
+                    predecessors=task_info.get('predecessors', ''),
+                    resources=resources,
+                    completed='completed' in task_info
+                )
+                db.session.add(task)
+
+        # Update materials
+        Material.query.filter_by(job_number=job_number).delete()
+        for index, material_info in materials_data.items():
+            material = Material(
+                job_number=job_number,
+                description=material_info['description'],
+                quantity=float(material_info['quantity']),
+                unit=material_info['unit']
+            )
+            db.session.add(material)
+
+        db.session.commit()
+        return redirect(url_for('review_jobs', include_completed=include_completed, job_number=job_number))
+
+    return render_template('review_jobs.html', jobs=jobs, selected_job=selected_job, tasks=tasks, materials=materials,
+                          include_completed=include_completed, machine_resources=machine_resources, human_resources=human_resources,
+                          machine_groups=machine_groups, human_groups=human_groups)
 
 @app.route('/cash_flow', methods=['GET'])
 def cash_flow():

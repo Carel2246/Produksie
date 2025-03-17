@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Template</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script>
+        function addTaskRow() {
+            const tbody = document.getElementById('tasks-body');
+            const rowCount = tbody.getElementsByTagName('tr').length;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" name="tasks[${rowCount}][task_number]" required></td>
+                <td><input type="text" name="tasks[${rowCount}][description]"></td>
+                <td><input type="number" name="tasks[${rowCount}][setup_time]" min="0" step="0.1" required></td>
+                <td><input type="number" name="tasks[${rowCount}][time_each]" min="0" step="0.1" required></td>
+                <td><input type="text" name="tasks[${rowCount}][predecessors]"></td>
+                <td><input type="text" name="tasks[${rowCount}][resources]" required></td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        function addMaterialRow() {
+            const tbody = document.getElementById('materials-body');
+            const rowCount = tbody.getElementsByTagName('tr').length;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" name="materials[${rowCount}][description]" required></td>
+                <td><input type="number" name="materials[${rowCount}][quantity]" min="0" step="0.1" required></td>
+                <td><input type="text" name="materials[${rowCount}][unit]" required></td>
+            `;
+            tbody.appendChild(row);
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Edit Template: {{ template.name }}</h1>
+        <button onclick="window.location.href='{{ url_for('add_template') }}'">Back to Add Template</button>
+        
+        <form method="POST" action="{{ url_for('edit_template', template_id=template.id) }}">
+            <label for="name">Template Name:</label>
+            <input type="text" id="name" name="name" value="{{ template.name }}" required><br>
+            <label for="description">Description:</label>
+            <input type="text" id="description" name="description" value="{{ template.description }}"><br>
+            <label for="price_each">Price Each:</label>
+            <input type="number" id="price_each" name="price_each" value="{{ template.price_each or '' }}" min="0" step="0.01"><br>
+
+            <h2>Tasks</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Task Number</th>
+                        <th>Description</th>
+                        <th>Setup Time (min)</th>
+                        <th>Time Each (min)</th>
+                        <th>Predecessors</th>
+                        <th>Resources</th>
+                    </tr>
+                </thead>
+                <tbody id="tasks-body">
+                    {% for task in tasks %}
+                        <tr>
+                            <td><input type="text" name="tasks[{{ loop.index0 }}][task_number]" value="{{ task.task_number }}" required></td>
+                            <td><input type="text" name="tasks[{{ loop.index0 }}][description]" value="{{ task.description }}"></td>
+                            <td><input type="number" name="tasks[{{ loop.index0 }}][setup_time]" value="{{ task.setup_time }}" min="0" step="0.1" required></td>
+                            <td><input type="number" name="tasks[{{ loop.index0 }}][time_each]" value="{{ task.time_each }}" min="0" step="0.1" required></td>
+                            <td><input type="text" name="tasks[{{ loop.index0 }}][predecessors]" value="{{ task.predecessors }}"></td>
+                            <td><input type="text" name="tasks[{{ loop.index0 }}][resources]" value="{{ task.resources }}" required></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button type="button" onclick="addTaskRow()">Add Task</button>
+
+            <h2>Materials</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Quantity</th>
+                        <th>Unit</th>
+                    </tr>
+                </thead>
+                <tbody id="materials-body">
+                    {% for material in materials %}
+                        <tr>
+                            <td><input type="text" name="materials[{{ loop.index0 }}][description]" value="{{ material.description }}" required></td>
+                            <td><input type="number" name="materials[{{ loop.index0 }}][quantity]" value="{{ material.quantity }}" min="0" step="0.1" required></td>
+                            <td><input type="text" name="materials[{{ loop.index0 }}][unit]" value="{{ material.unit }}" required></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button type="button" onclick="addMaterialRow()">Add Material</button>
+
+            <br><button type="submit">Update Template</button>
+        </form>
+    </div>
+</body>
+</html>

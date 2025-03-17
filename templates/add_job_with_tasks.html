@@ -1,184 +1,280 @@
-<!-- templates/add_job_with_tasks.html -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Add Job with Tasks</title>
+    <meta charset="UTF-8">
+    <title>Add Job with Tasks and Materials</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        function toggleTemplateDropdown() {
+            const jobNumber = document.getElementById('job_number').value;
+            const templateSelect = document.getElementById('template_id');
+            templateSelect.disabled = !jobNumber.trim();
+        }
+
+        function populateFromTemplate() {
+            const templateId = document.getElementById('template_id').value;
+            const jobNumber = document.getElementById('job_number').value;
+            if (templateId && jobNumber) {
+                if (confirm("Are you sure you want to overwrite using this template? This will clear all current tasks and materials.")) {
+                    const quantity = prompt("Please enter the quantity for this job:");
+                    if (quantity && !isNaN(quantity) && quantity > 0) {
+                        fetch('/get_template_data/' + templateId + '?job_number=' + encodeURIComponent(jobNumber))
+                            .then(response => response.json())
+                            .then(data => {
+                                const tasksBody = document.getElementById('tasks-body');
+                                const materialsBody = document.getElementById('materials-body');
+                                const descriptionField = document.getElementById('description');
+                                const quantityField = document.getElementById('quantity');
+                                const priceEachField = document.getElementById('price_each');
+                                tasksBody.innerHTML = '';
+                                materialsBody.innerHTML = '';
+                                
+                                descriptionField.value = data.template_description;
+                                quantityField.value = quantity;
+                                if (data.template_price_each !== null) {
+                                    priceEachField.value = data.template_price_each;
+                                }
+
+                                data.tasks.forEach((task) => addTaskRow(task));
+                                data.materials.forEach((material) => {
+                                    const scaledQuantity = material.quantity * quantity;
+                                    addMaterialRow({ description: material.description, quantity: scaledQuantity, unit: material.unit });
+                                });
+
+                                document.getElementById('template_id').value = '';
+                            })
+                            .catch(error => console.error('Template fetch error:', error));
+                    } else {
+                        alert("Please enter a valid quantity.");
+                        document.getElementById('template_id').value = '';
+                    }
+                } else {
+                    document.getElementById('template_id').value = '';
+                }
+            }
+        }
+
+        function addTaskRow(data = {}) {
+            console.log('addTaskRow called with:', data);
+            const tbody = document.getElementById('tasks-body');
+            const rowCount = tbody.getElementsByTagName('tr').length;
+            const resources = (data.resources || '').split(',').map(r => r.trim());
+            const machines = resources.filter(r => {% for g in machine_groups %}'{{ g.name }}' === r || {% endfor %}{% for r in machine_resources %}'{{ r.name }}' === r || {% endfor %}false).join(', ');
+            const humans = resources.filter(r => {% for g in human_groups %}'{{ g.name }}' === r || {% endfor %}{% for r in human_resources %}'{{ r.name }}' === r || {% endfor %}false).join(', ');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" name="tasks[${rowCount}][task_number]" value="${data.task_number || ''}" required></td>
+                <td><input type="text" name="tasks[${rowCount}][description]" value="${data.description || ''}"></td>
+                <td><input type="number" name="tasks[${rowCount}][setup_time]" value="${data.setup_time || ''}" min="0" step="0.1" required></td>
+                <td><input type="number" name="tasks[${rowCount}][time_each]" value="${data.time_each || ''}" min="0" step="0.1" required></td>
+                <td><input type="text" name="tasks[${rowCount}][predecessors]" value="${data.predecessors || ''}"></td>
+                <td class="resource-cell">
+                    <input type="text" name="tasks[${rowCount}][machines]" value="${machines}" class="resources-input" oninput="syncChecklist(this, 'machines')">
+                    <div class="resource-checklist" style="display: none; position: absolute; background: white; border: 1px solid #ccc; padding: 10px;">
+                        ${generateChecklist(rowCount, 'machines')}
+                    </div>
+                </td>
+                <td class="resource-cell">
+                    <input type="text" name="tasks[${rowCount}][humans]" value="${humans}" class="resources-input" oninput="syncChecklist(this, 'humans')">
+                    <div class="resource-checklist" style="display: none; position: absolute; background: white; border: 1px solid #ccc; padding: 10px;">
+                        ${generateChecklist(rowCount, 'humans')}
+                    </div>
+                </td>
+                <td><input type="checkbox" name="tasks[${rowCount}][completed]" ${data.completed ? 'checked' : ''}></td>
+                <td>
+                    <button type="button" class="delete-btn" onclick="deleteRow(this)" ${data.task_number ? '' : 'style="display: none;"'}>Delete</button>
+                    <button type="button" class="cancel-btn" onclick="cancelRow(this)" ${data.task_number ? 'style="display: none;"' : ''}>Cancel</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+            const inputs = row.querySelectorAll('.resources-input');
+            inputs.forEach(input => {
+                input.addEventListener('focus', () => input.nextElementSibling.style.display = 'block');
+                input.addEventListener('blur', (e) => setTimeout(() => e.target.nextElementSibling.style.display = 'none', 200));
+                syncChecklist(input, input.name.includes('machines') ? 'machines' : 'humans');
+            });
+        }
+
+        function addMaterialRow(data = {}) {
+            const tbody = document.getElementById('materials-body');
+            const rowCount = tbody.getElementsByTagName('tr').length;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" name="materials[${rowCount}][description]" value="${data.description || ''}" required></td>
+                <td><input type="number" name="materials[${rowCount}][quantity]" value="${data.quantity || ''}" min="0" step="0.1" required></td>
+                <td><input type="text" name="materials[${rowCount}][unit]" value="${data.unit || ''}" required></td>
+                <td>
+                    <button type="button" class="delete-btn" onclick="deleteRow(this)" ${data.description ? '' : 'style="display: none;"'}>Delete</button>
+                    <button type="button" class="cancel-btn" onclick="cancelRow(this)" ${data.description ? 'style="display: none;"' : ''}>Cancel</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        function generateChecklist(rowIndex, type) {
+            let html = '';
+            try {
+                if (type === 'machines') {
+                    {% for group in machine_groups %}
+                        html += `<label><input type="checkbox" class="resource-checkbox" data-row="${rowIndex}" data-type="machines" value="{{ group.name }}" onchange="syncText(this)"> {{ group.name }}</label><br>`;
+                    {% endfor %}
+                    html += '<hr style="margin: 5px 0;">';
+                    {% for resource in machine_resources %}
+                        html += `<label><input type="checkbox" class="resource-checkbox" data-row="${rowIndex}" data-type="machines" value="{{ resource.name }}" onchange="syncText(this)"> {{ resource.name }}</label><br>`;
+                    {% endfor %}
+                } else if (type === 'humans') {
+                    {% for group in human_groups %}
+                        html += `<label><input type="checkbox" class="resource-checkbox" data-row="${rowIndex}" data-type="humans" value="{{ group.name }}" onchange="syncText(this)"> {{ group.name }}</label><br>`;
+                    {% endfor %}
+                    html += '<hr style="margin: 5px 0;">';
+                    {% for resource in human_resources %}
+                        html += `<label><input type="checkbox" class="resource-checkbox" data-row="${rowIndex}" data-type="humans" value="{{ resource.name }}" onchange="syncText(this)"> {{ resource.name }}</label><br>`;
+                    {% endfor %}
+                }
+            } catch (e) {
+                console.error('Error generating checklist:', e);
+            }
+            return html;
+        }
+
+        function syncChecklist(input, type) {
+            console.log('syncChecklist called for', type, 'with value:', input.value);
+            const checklist = input.nextElementSibling;
+            const values = input.value.split(',').map(v => v.trim()).filter(v => v);
+            checklist.querySelectorAll('.resource-checkbox').forEach(cb => {
+                cb.checked = values.includes(cb.value);
+            });
+        }
+
+        function syncText(checkbox) {
+            console.log('syncText called for checkbox:', checkbox.value, 'checked:', checkbox.checked);
+            const rowIndex = checkbox.dataset.row;
+            const type = checkbox.dataset.type;
+            // Find the input by traversing the DOM instead of querySelector
+            const checklist = checkbox.closest('.resource-checklist');
+            const input = checklist.previousElementSibling;
+            if (!input) {
+                console.error('Input not found for checkbox:', checkbox.value, 'row:', rowIndex, 'type:', type);
+                return;
+            }
+            const checked = Array.from(checklist.querySelectorAll(`.resource-checkbox[data-type="${type}"]:checked`))
+                .map(cb => cb.value);
+            console.log('Checked values:', checked);
+            input.value = checked.join(', ');
+            console.log('Updated input value:', input.value);
+        }
+
+        function deleteRow(button) {
+            if (confirm('Are you sure you want to delete this row?')) {
+                button.closest('tr').remove();
+            }
+        }
+
+        function cancelRow(button) {
+            const row = button.closest('tr');
+            if (!row.querySelector('input[type="text"]').value) {
+                row.remove();
+            } else {
+                button.style.display = 'none';
+                row.querySelector('.delete-btn').style.display = 'inline';
+            }
+        }
+    </script>
     <style>
-        .resource-popup {
-            display: none;
-            position: absolute;
-            background: white;
-            border: 1px solid #ccc;
-            padding: 10px;
-            max-height: 200px;
-            overflow-y: auto;
-            z-index: 1000;
+        .resource-checklist { 
+            z-index: 10; 
+            width: 10vw; 
+            max-height: 25vh; 
+            overflow-y: auto; 
         }
-        .resource-item {
-            margin: 5px 0;
-        }
-        .error-row {
-            background-color: #ffe6e6;
-        }
+        .delete-btn, .cancel-btn { margin: 0 5px; }
+        .resource-cell { position: relative; }
     </style>
 </head>
 <body>
-    <h1>Add Job with Tasks</h1>
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
-    <form method="POST" enctype="multipart/form-data" id="job-form">
-        <div class="job-details">
+    <div class="container">
+        <h1>Add Job with Tasks and Materials</h1>
+        <button onclick="window.location.href='{{ url_for('index') }}'">Home</button>
+        <button onclick="window.location.href='{{ url_for('review_jobs') }}'">Edit Jobs</button>
+        
+        {% if error %}
+            <p style="color: red;">{{ error }}</p>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('add_job_with_tasks') }}">
             <h2>Job Details</h2>
-            <label>Job Number: <input type="text" name="job_number" required></label><br>
-            <label>Description: <input type="text" name="description"></label><br>
-            <label>Order Date: <input type="datetime-local" name="order_date"></label><br>
-            <label>Promised Date: <input type="datetime-local" name="promised_date"></label><br>
-            <label>Quantity: <input type="number" name="quantity" required min="1"></label><br>
-            <label>Price Each: <input type="number" name="price_each" step="0.01" required></label><br>
-            <label>Customer: <input type="text" name="customer"></label><br>
-            <label>Block Job: <input type="checkbox" id="blocked" name="blocked"></label><br>
-</div>
-        </div>
+            <label for="job_number">Job Number:</label>
+            <input type="text" id="job_number" name="job_number" oninput="toggleTemplateDropdown()" required><br>
 
-        <h2>Tasks</h2>
-        <table id="tasks-table">
-            <thead>
-                <tr>
-                    <th>Task Number</th>
-                    <th>Description</th>
-                    <th>Setup Time (min)</th>
-                    <th>Time Each (min)</th>
-                    <th>Predecessors</th>
-                    <th>Resources</th>
-                    <th>Completed</th>
-                    <th>Remove</th>
-                </tr>
-            </thead>
-            <tbody id="tasks-container">
-                <!-- Task rows will be added here -->
-            </tbody>
-        </table>
-        <button type="button" onclick="addTaskRow()">Add Task Row</button>
-        <button type="button" onclick="validateResources()">Validate Resources</button><br><br>
-        <input type="submit" value="Submit Job and Tasks">
-    </form>
+            <label for="template_id">Select Template:</label>
+            <select id="template_id" name="template_id" onchange="populateFromTemplate()" disabled>
+                <option value="">-- Select a Template --</option>
+                {% for template in templates %}
+                    <option value="{{ template.id }}">{{ template.name }} - {{ template.description }}</option>
+                {% endfor %}
+            </select><br>
 
-    <h2>Existing Jobs</h2>
-    <ul>
-    {% for job in jobs %}
-        <li>{{ job.job_number }} - {{ job.description }} (Qty: {{ job.quantity }})</li>
-    {% endfor %}
-    </ul>
+            <label for="description">Description:</label>
+            <input type="text" id="description" name="description"><br>
+            <label for="order_date">Order Date:</label>
+            <input type="datetime-local" id="order_date" name="order_date"><br>
+            <label for="promised_date">Promised Date:</label>
+            <input type="datetime-local" id="promised_date" name="promised_date"><br>
+            <label for="quantity">Quantity:</label>
+            <input type="number" id="quantity" name="quantity" min="1" required><br>
+            <label for="price_each">Price Each:</label>
+            <input type="number" id="price_each" name="price_each" min="0" step="0.01" required><br>
+            <label for="customer">Customer:</label>
+            <input type="text" id="customer" name="customer"><br>
+            <label for="blocked">Block Job:</label>
+            <input type="checkbox" id="blocked" name="blocked"><br>
 
-    <!-- Resource Popup -->
-    <div id="resource-popup" class="resource-popup">
-        {% for resource in resources %}
-            <div class="resource-item">
-                <input type="checkbox" id="res-{{ resource.name }}" value="{{ resource.name }}">
-                <label for="res-{{ resource.name }}">{{ resource.name }} ({{ resource.type }})</label>
-            </div>
-        {% endfor %}
-        {% for group in resource_groups %}
-            <div class="resource-item">
-                <input type="checkbox" id="group-{{ group.name }}" value="{{ group.name }}">
-                <label for="group-{{ group.name }}">{{ group.name }} (Group)</label>
-            </div>
-        {% endfor %}
-        <button onclick="applyResources()">Apply</button>
+            <h2>Tasks</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Task Number</th>
+                        <th>Description</th>
+                        <th>Setup Time (min)</th>
+                        <th>Time Each (min)</th>
+                        <th>Predecessors</th>
+                        <th>Machines</th>
+                        <th>Humans</th>
+                        <th>Completed</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tasks-body">
+                    <!-- Populated dynamically -->
+                </tbody>
+            </table>
+            <button type="button" onclick="addTaskRow()">Add Task</button>
+
+            <h2>Materials</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Quantity</th>
+                        <th>Unit</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="materials-body">
+                    <!-- Populated dynamically -->
+                </tbody>
+            </table>
+            <button type="button" onclick="addMaterialRow()">Add Material</button>
+
+            <br><button type="submit">Add Job</button>
+        </form>
+
+        <h2>Existing Jobs</h2>
+        <ul>
+            {% for job in jobs %}
+                <li>{{ job.job_number }} - {{ job.description }} (Qty: {{ job.quantity }}) {% if job.blocked %}[Blocked]{% endif %}</li>
+            {% endfor %}
+        </ul>
     </div>
-
-    <script>
-        let taskCount = 0;
-        let activeInput = null;
-
-        function addTaskRow() {
-            taskCount++;
-            const container = document.getElementById('tasks-container');
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td><input type="text" name="tasks[${taskCount}][task_number]" required></td>
-                <td><input type="text" name="tasks[${taskCount}][description]"></td>
-                <td><input type="number" name="tasks[${taskCount}][setup_time]" required min="0"></td>
-                <td><input type="number" name="tasks[${taskCount}][time_each]" required min="0"></td>
-                <td><input type="text" name="tasks[${taskCount}][predecessors]" placeholder="Comma-separated"></td>
-                <td><input type="text" name="tasks[${taskCount}][resources]" required placeholder="Comma-separated" onfocus="showResourcePopup(this)"></td>
-                <td><input type="checkbox" name="tasks[${taskCount}][completed]"></td>
-                <td class="remove-task" onclick="this.parentElement.remove()">X</td>
-            `;
-            container.appendChild(row);
-        }
-
-        function showResourcePopup(input) {
-            activeInput = input;
-            const popup = document.getElementById('resource-popup');
-            const rect = input.getBoundingClientRect();
-            popup.style.left = `${rect.left}px`;
-            popup.style.top = `${rect.bottom + window.scrollY}px`;
-            popup.style.display = 'block';
-
-            // Load current values into checkboxes
-            const currentValues = input.value.split(',').map(v => v.trim()).filter(v => v);
-            document.querySelectorAll('#resource-popup input[type="checkbox"]').forEach(cb => {
-                cb.checked = currentValues.includes(cb.value);
-            });
-        }
-
-        function applyResources() {
-            if (!activeInput) return;
-            const selected = [];
-            document.querySelectorAll('#resource-popup input[type="checkbox"]:checked').forEach(cb => {
-                selected.push(cb.value);
-            });
-            activeInput.value = selected.join(', ');
-            document.getElementById('resource-popup').style.display = 'none';
-        }
-
-        // Hide popup when clicking outside
-        document.addEventListener('click', (e) => {
-            const popup = document.getElementById('resource-popup');
-            if (!popup.contains(e.target) && e.target !== activeInput) {
-                popup.style.display = 'none';
-            }
-        });
-
-        function validateResources() {
-            const rows = document.querySelectorAll('#tasks-container tr');
-            const resourceData = [];
-            rows.forEach((row, index) => {
-                const resourcesInput = row.querySelector(`input[name="tasks[${index + 1}][resources]"]`);
-                if (resourcesInput && resourcesInput.value) {
-                    resourceData.push({
-                        row: index,
-                        resources: resourcesInput.value.split(',').map(r => r.trim())
-                    });
-                }
-            });
-
-            fetch('/validate_resources', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ resources: resourceData })
-            })
-            .then(response => response.json())
-            .then(data => {
-                rows.forEach(row => row.classList.remove('error-row'));
-                data.invalid.forEach(item => {
-                    const row = rows[item.row];
-                    row.classList.add('error-row');
-                    alert(`Invalid resources in row ${item.row + 1}: ${item.invalid.join(', ')}`);
-                });
-                if (data.invalid.length === 0) {
-                    alert('All resources are valid!');
-                }
-            })
-            .catch(error => console.error('Validation error:', error));
-        }
-
-        // Add one task row by default
-        addTaskRow();
-    </script>
 </body>
 </html>
