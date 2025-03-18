@@ -13,7 +13,7 @@ import math
 import os
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://carel:EhB9KidyX4upNYyp6PQJh5i7uQJa2o37@dpg-cvc9v91c1ekc73eovi9g-a/jobshop'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://carel:EMwgUT2OxzjXGo43oytMfcDWRpWHgRPp@dpg-cvcsjhrtq21c73a718v0-a/jobshop_wyn8'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
