@@ -13,8 +13,16 @@ import math
 import os
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://carel:EMwgUT2OxzjXGo43oytMfcDWRpWHgRPp@dpg-cvcsjhrtq21c73a718v0-a/jobshop_wyn8'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db_url = os.getenv("DATABASE_URL", "postgresql://carel:EMwgUT2OxzjXGo43oytMfcDWRpWHgRPp@dpg-cvcsjhrtq21c73a718v0-a/jobshop_wyn8")
+
+# Fix "postgres://" to "postgresql://"
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
 db = SQLAlchemy(app)
 
 logging.basicConfig(level=logging.DEBUG)
